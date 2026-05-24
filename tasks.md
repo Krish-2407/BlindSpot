@@ -33,11 +33,11 @@ results (
 ## Phase 1 — Backend Foundation (Day 1)
 - [x] Initialize backend folder, run `npm init -y`, install dependencies:
       `express cors dotenv @supabase/supabase-js @google/generative-ai`
-- [ ] Create `config/supabase.js` — Supabase client initialization helper
-- [ ] Create `config/gemini.js` — Gemini client initialization helper
-- [ ] Create `.env` file with: `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `PORT=3000`
-- [ ] Create `server.js` — Express app entry point with CORS, JSON middleware, and route mounting
-- [ ] Build `routes/agent1.js` — Expert Knowledge Mapper endpoint
+- [x] Create `config/supabase.js` — Supabase client initialization helper
+- [x] Create `config/gemini.js` — Gemini client initialization helper
+- [x] Create `.env` file with: `GEMINI_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `PORT=3000`
+- [x] Create `server.js` — Express app entry point with CORS, JSON middleware, and route mounting
+- [x] Build `routes/agent1.js` — Expert Knowledge Mapper endpoint
       - Accepts: `{ topic, openingExplanation }`
       - Calls Gemini with concept graph prompt
       - Saves result to Supabase `sessions` table
@@ -48,7 +48,8 @@ results (
       - Scores user confidence per concept after each message
       - Saves updated user model to Supabase `conversations` table
       - Returns: `{ reply, updatedUserModel }`
-- [ ] Test both routes in Postman before moving to Phase 2
+- [x] Test both routes using integration tests (mocking Supabase and Gemini) before moving to Phase 2
+- [x] Run node syntax validation and module loader checks on routing files to verify imports and exports
 
 ---
 

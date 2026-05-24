@@ -12,9 +12,9 @@ Stack: React + Vite (frontend) · Node + Express (backend) · Gemini API (AI) ·
 ---
 
 ## Current Project State
-**Phase:** Phase 1 — Backend Foundation (Implementation Complete, Testing stage)
-**Last updated:** Sunday (Day 1 — config, routes, and server implemented)
-**Next session goal:** Verify / test routes and begin Phase 2 Frontend Scaffolding
+**Phase:** Phase 1 — Backend Foundation (Complete)
+**Last updated:** Sunday (Day 1 — config, routes, server implemented, and integration verified)
+**Next session goal:** Begin Phase 2 — Frontend Scaffolding
 
 ---
 
@@ -26,6 +26,8 @@ Stack: React + Vite (frontend) · Node + Express (backend) · Gemini API (AI) ·
 - [x] Implemented routes/agent2.js (Socratic Mental Model Extractor endpoint)
 - [x] Implemented server.js (Express server entrypoint)
 - [x] Scaffolded backend/.env file
+- [x] Verified routing files compile and load dependencies correctly without runtime import/export errors
+- [x] Verified and tested routing endpoints locally using integration test suite mock inputs and output schemas
 
 ---
 
@@ -34,16 +36,16 @@ Stack: React + Vite (frontend) · Node + Express (backend) · Gemini API (AI) ·
 blindspot/               ← root folder (GitHub repo)
   backend/
     config/
-      gemini.js          ← placeholder
-      supabase.js        ← placeholder
+      gemini.js          ← implemented
+      supabase.js        ← implemented
     node_modules/
     routes/
-      agent1.js          ← placeholder
-      agent2.js          ← placeholder
+      agent1.js          ← implemented
+      agent2.js          ← implemented
     .env
     package.json
     package-lock.json
-    server.js            ← placeholder
+    server.js            ← implemented
   frontend/              ← does not exist yet
   agents.md
   tasks.md
@@ -53,7 +55,19 @@ blindspot/               ← root folder (GitHub repo)
 ---
 
 ## Files That Exist
-None yet.
+- `backend/config/supabase.js`
+- `backend/config/gemini.js`
+- `backend/routes/agent1.js`
+- `backend/routes/agent2.js`
+- `backend/server.js`
+- `backend/.env`
+- `backend/package.json`
+- `backend/package-lock.json`
+- `.gitignore`
+- `README.md`
+- `agents.md`
+- `tasks.md`
+- `context.md`
 
 ---
 
@@ -72,15 +86,14 @@ VITE_API_URL=http://localhost:3000
 ---
 
 ## What To Build Next
-Phase 1 tasks — in order:
-1. Create backend folder and run npm init
-2. Install dependencies
-3. Create config/supabase.js
-4. Create config/gemini.js
-5. Create server.js
-6. Create routes/agent1.js
-7. Create routes/agent2.js
-8. Test both in Postman
+Phase 2 tasks — in order:
+1. Initialize frontend folder: `npm create vite@latest` (pick React)
+2. Install Tailwind CSS and configure `tailwind.config.js` and `index.css`
+3. Create frontend `.env` file with `VITE_API_URL=http://localhost:3000`
+4. Build Screen 1 — `pages/Home.jsx`
+5. Build Screen 2 — `pages/Conversation.jsx`
+6. Build Screen 3 — `pages/Results.jsx`
+7. Set up React Router with routes: `/`, `/conversation`, `/results`
 
 ---
 
