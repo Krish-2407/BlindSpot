@@ -54,8 +54,8 @@ results (
 ---
 
 ## Phase 2 — Frontend Scaffolding (Day 2)
-- [ ] Initialize frontend folder: `npm create vite@latest` (pick React)
-- [ ] Install Tailwind CSS and configure `tailwind.config.js` and `index.css`
+- [x] Initialize frontend folder: `npx create-vite` (React)
+- [x] Install Tailwind CSS and configure `tailwind.config.js` and `index.css`
 - [ ] Install axios: `npm install axios`
 - [ ] Create `.env` file with: `VITE_API_URL=http://localhost:3000`
 - [ ] Build Screen 1 — `pages/Home.jsx`
