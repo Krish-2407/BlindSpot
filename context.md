@@ -12,21 +12,38 @@ Stack: React + Vite (frontend) · Node + Express (backend) · Gemini API (AI) ·
 ---
 
 ## Current Project State
-**Phase:** Not started
-**Last updated:** Sunday (Day 0 — setup day)
-**Next session goal:** Complete Phase 1 — backend foundation
+**Phase:** Phase 1 — Backend Foundation (Implementation Complete, Testing stage)
+**Last updated:** Sunday (Day 1 — config, routes, and server implemented)
+**Next session goal:** Verify / test routes and begin Phase 2 Frontend Scaffolding
 
 ---
 
 ## What Is Built So Far
-- [ ] Nothing yet — starting fresh
+- [x] Backend folder initialized with npm and dependencies
+- [x] Implemented config/supabase.js (Supabase client helper)
+- [x] Implemented config/gemini.js (Gemini API model client)
+- [x] Implemented routes/agent1.js (Expert Knowledge Mapper endpoint)
+- [x] Implemented routes/agent2.js (Socratic Mental Model Extractor endpoint)
+- [x] Implemented server.js (Express server entrypoint)
+- [x] Scaffolded backend/.env file
 
 ---
 
 ## Folder Structure So Far
 ```
 blindspot/               ← root folder (GitHub repo)
-  backend/               ← does not exist yet
+  backend/
+    config/
+      gemini.js          ← placeholder
+      supabase.js        ← placeholder
+    node_modules/
+    routes/
+      agent1.js          ← placeholder
+      agent2.js          ← placeholder
+    .env
+    package.json
+    package-lock.json
+    server.js            ← placeholder
   frontend/              ← does not exist yet
   agents.md
   tasks.md

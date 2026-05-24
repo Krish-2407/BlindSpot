@@ -31,7 +31,7 @@ results (
 ---
 
 ## Phase 1 — Backend Foundation (Day 1)
-- [ ] Initialize backend folder, run `npm init -y`, install dependencies:
+- [x] Initialize backend folder, run `npm init -y`, install dependencies:
       `express cors dotenv @supabase/supabase-js @google/generative-ai`
 - [ ] Create `config/supabase.js` — Supabase client initialization helper
 - [ ] Create `config/gemini.js` — Gemini client initialization helper
@@ -42,7 +42,7 @@ results (
       - Calls Gemini with concept graph prompt
       - Saves result to Supabase `sessions` table
       - Returns: `{ sessionId, expertGraph }`
-- [ ] Build `routes/agent2.js` — Mental Model Extractor endpoint
+- [x] Build `routes/agent2.js` — Mental Model Extractor endpoint
       - Accepts: `{ sessionId, messages, userMessage }`
       - Passes full conversation history to Gemini
       - Scores user confidence per concept after each message
