@@ -56,8 +56,8 @@ results (
 ## Phase 2 — Frontend Scaffolding (Day 2)
 - [x] Initialize frontend folder: `npx create-vite` (React)
 - [x] Install Tailwind CSS and configure `tailwind.config.js` and `index.css`
-- [ ] Install axios: `npm install axios`
-- [ ] Create `.env` file with: `VITE_API_URL=http://localhost:3000`
+- [x] Install axios: `npm install axios`
+- [x] Create `.env` file with: `VITE_API_URL=http://localhost:3000`
 - [ ] Build Screen 1 — `pages/Home.jsx`
       - Topic input field
       - Opening explanation textarea
@@ -73,7 +73,7 @@ results (
       - Placeholder for gap map (static div for now)
       - List of 5 question cards with "Explore" button
       - Ordered learning path list
-- [ ] Set up React Router with routes: `/`, `/conversation`, `/results`
+- [x] Set up React Router with routes: `/`, `/conversation`, `/results`
 
 ---
 

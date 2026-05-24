@@ -13,8 +13,8 @@ Stack: React + Vite (frontend) · Node + Express (backend) · Gemini API (AI) ·
 
 ## Current Project State
 **Phase:** Phase 2 — Frontend Scaffolding (In Progress)
-**Last updated:** Sunday (Day 2 — Frontend scaffolded and Tailwind CSS integrated with premium custom theme)
-**Next session goal:** Complete remaining Phase 2 Tasks (Axios, pages, routing)
+**Last updated:** Sunday (Day 2 — FlowContext, React Router, Layout shell, and page placeholders implemented)
+**Next session goal:** Complete remaining Phase 2 Tasks (implementing API integration on Home, Conversation, and Results pages)
 
 ---
 
@@ -32,7 +32,12 @@ Stack: React + Vite (frontend) · Node + Express (backend) · Gemini API (AI) ·
 - [x] Installed and integrated Tailwind CSS, PostCSS, and Autoprefixer
 - [x] Configured custom brand palette in tailwind.config.js (glow states, dark card, emerald highlights)
 - [x] Added Google Outfit & Inter typography with customized base html/body styles
-- [x] Cleaned boilerplate code and verified build with 0 compile warnings
+- [x] Installed Axios and React Router dependencies
+- [x] Configured frontend environment variables in `.env`
+- [x] Created global `FlowContext` to manage active topic, session ID, master graph, and chat history
+- [x] Built premium `Layout` container shell with progress steps and active status highlights
+- [x] Implemented placeholder pages `Home`, `Conversation`, and `Results` linked to global state
+- [x] Verified build compiles successfully with zero warnings
 
 ---
 
@@ -56,9 +61,18 @@ blindspot/               ← root folder (GitHub repo)
       favicon.svg
     src/
       assets/
-      App.jsx            ← updated with Tailwind preview
+      components/
+        Layout.jsx       ← created (premium glassmorphic wrapper)
+      context/
+        FlowContext.jsx  ← created (global user flow state manager)
+      pages/
+        Home.jsx         ← created (topic submission panel)
+        Conversation.jsx ← created (Socratic chat panel)
+        Results.jsx      ← created (gap analysis visualizer panel)
+      App.jsx            ← updated with FlowContext, Router, and Layout
       index.css          ← updated with Tailwind directives & fonts
       main.jsx
+    .env                 ← created (VITE_API_URL)
     index.html           ← updated title & SEO description
     postcss.config.js    ← created
     tailwind.config.js   ← created with custom colors & shadows
@@ -79,9 +93,15 @@ blindspot/               ← root folder (GitHub repo)
 - `backend/.env`
 - `backend/package.json`
 - `backend/package-lock.json`
+- `frontend/src/components/Layout.jsx`
+- `frontend/src/context/FlowContext.jsx`
+- `frontend/src/pages/Home.jsx`
+- `frontend/src/pages/Conversation.jsx`
+- `frontend/src/pages/Results.jsx`
 - `frontend/src/App.jsx`
 - `frontend/src/index.css`
 - `frontend/src/main.jsx`
+- `frontend/.env`
 - `frontend/index.html`
 - `frontend/tailwind.config.js`
 - `frontend/postcss.config.js`
