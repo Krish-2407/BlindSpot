@@ -58,18 +58,18 @@ results (
 - [x] Install Tailwind CSS and configure `tailwind.config.js` and `index.css`
 - [x] Install axios: `npm install axios`
 - [x] Create `.env` file with: `VITE_API_URL=http://localhost:3000`
-- [ ] Build Screen 1 — `pages/Home.jsx`
+- [x] Build Screen 1 — `pages/Home.jsx`
       - Topic input field
       - Opening explanation textarea
       - Submit button that calls POST /api/agent1
       - On success, navigate to Screen 2 with sessionId
-- [ ] Build Screen 2 — `pages/Conversation.jsx`
+- [x] Build Screen 2 — `pages/Conversation.jsx`
       - Chat message list (user right, AI left)
       - Text input and send button
       - Calls POST /api/agent2 on each message
       - Shows turn counter (e.g. "3 of 6 turns")
       - "See my blind spots" button appears after final turn
-- [ ] Build Screen 3 — `pages/Results.jsx`
+- [x] Build Screen 3 — `pages/Results.jsx`
       - Placeholder for gap map (static div for now)
       - List of 5 question cards with "Explore" button
       - Ordered learning path list

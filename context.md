@@ -12,9 +12,9 @@ Stack: React + Vite (frontend) · Node + Express (backend) · Gemini API (AI) ·
 ---
 
 ## Current Project State
-**Phase:** Phase 2 — Frontend Scaffolding (In Progress)
-**Last updated:** Sunday (Day 2 — FlowContext, React Router, Layout shell, and page placeholders implemented)
-**Next session goal:** Complete remaining Phase 2 Tasks (implementing API integration on Home, Conversation, and Results pages)
+**Phase:** Phase 2 — Frontend Scaffolding (Complete)
+**Last updated:** Sunday (Day 2 — FlowContext, React Router, Layout, and fully functional API pages implemented)
+**Next session goal:** Start Phase 3 — Pipeline Integration (Agent 3 Gap Ranker, Agent 4 Socratic Output, real D3.js node graph)
 
 ---
 
@@ -35,8 +35,11 @@ Stack: React + Vite (frontend) · Node + Express (backend) · Gemini API (AI) ·
 - [x] Installed Axios and React Router dependencies
 - [x] Configured frontend environment variables in `.env`
 - [x] Created global `FlowContext` to manage active topic, session ID, master graph, and chat history
-- [x] Built premium `Layout` container shell with progress steps and active status highlights
-- [x] Implemented placeholder pages `Home`, `Conversation`, and `Results` linked to global state
+- [x] Built premium pass-through `Layout` root container
+- [x] Fully implemented frontend UI pages `Home`, `Conversation`, and `Results` using brand style guide
+- [x] Integrated `Home` page with backend `/api/agent1` and initial Socratic question bootstrap
+- [x] Integrated `Conversation` Socratic chat page with backend `/api/agent2`
+- [x] Connected all pages dynamically to global state hooks in `FlowContext`
 - [x] Verified build compiles successfully with zero warnings
 
 ---
@@ -130,14 +133,12 @@ VITE_API_URL=http://localhost:3000
 ---
 
 ## What To Build Next
-Phase 2 tasks — in order:
-1. Install axios: `npm install axios`
-2. Create frontend `.env` file with `VITE_API_URL=http://localhost:3000`
-3. Set up React Router and pages folder structure
-4. Build Screen 1 — `pages/Home.jsx`
-5. Build Screen 2 — `pages/Conversation.jsx`
-6. Build Screen 3 — `pages/Results.jsx`
-7. Set up React Router with routes: `/`, `/conversation`, `/results`
+Phase 3 tasks — in order:
+1. Build `routes/agent3.js` — Gap Ranker endpoint (calculates unlock scores and confusion multipliers)
+2. Build `routes/agent4.js` — Socratic Output endpoint (generates Socratic questions from gaps)
+3. Wire Screen 2 "See my blind spots" button to call Agent 3 then Agent 4 in sequence
+4. Wire Screen 3 to read and display real data from Agent 4 output
+5. Replace Screen 3 placeholder gap map with a basic D3.js node graph
 
 ---
 
