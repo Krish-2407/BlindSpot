@@ -23,34 +23,23 @@ export default function Home() {
     setLoadingStep('mapping')
 
     try {
-      // 1. Call Agent 1 to build the concept dependency graph
-      const response1 = await axios.post(`${API_URL}/api/agent1`, {
+      // Clear any prior chat history first
+      setChatHistory([])
+
+      // Call Agent 1 to build the concept dependency graph
+      const response = await axios.post(`${API_URL}/api/agent1`, {
         topic: topic.trim(),
         openingExplanation: explanation.trim()
       })
 
-      const { sessionId, expertGraph } = response1.data
+      const { sessionId, expertGraph } = response.data
+      
+      // Capture expertGraph regardless of casing format from backend
+      const graphData = expertGraph || response.data.expert_graph
+
       setSessionId(sessionId)
       setActiveTopic(topic.trim())
-      setMasterGraph(expertGraph)
-
-      setLoadingStep('diagnosing')
-
-      // 2. Call Agent 2 to generate the first question based on the explanation
-      const initialMessage = explanation.trim() || `I want to map my understanding of ${topic.trim()}. Please ask me a diagnostic question.`
-      const response2 = await axios.post(`${API_URL}/api/agent2`, {
-        sessionId,
-        messages: [],
-        userMessage: initialMessage
-      })
-
-      const { reply, updatedUserModel } = response2.data
-
-      // Save the initial greeting/first question to context
-      setChatHistory([
-        { role: 'user', content: initialMessage },
-        { role: 'assistant', content: reply, userModelSnapshot: updatedUserModel }
-      ])
+      setMasterGraph(graphData)
 
       setActiveScreen('conversation')
       navigate('/conversation')
@@ -77,6 +66,17 @@ export default function Home() {
         @keyframes twinkle { 0%, 100% { opacity: 0.2; transform: scale(0.8); } 50% { opacity: 0.8; transform: scale(1.2); } }
         @keyframes breathe-glow { 0%, 100% { opacity: 0.25; transform: translate(-50%, -50%) scale(1); } 50% { opacity: 0.45; transform: translate(-50%, -50%) scale(1.03); } }
         @keyframes node-pulse { 0%, 100% { transform: scale(1); filter: brightness(1); } 50% { transform: scale(1.04); filter: brightness(1.1); } }
+        @keyframes shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        .shimmer-bg {
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.15), transparent);
+          transform: translateX(-100%);
+          animation: shimmer 1.6s infinite linear;
+        }
         
         /* 80% Animation Speed Reduction (Smooth, Slow, Eased motion) */
         .orbit-node-1 { animation: orbit1 150s ease-in-out infinite; }
@@ -282,10 +282,11 @@ export default function Home() {
 
             {/* Actions/Submit inside form for tighter alignment */}
             {loading ? (
-              <div className="flex flex-col items-center justify-center py-3 gap-2 bg-brand-dark/20 rounded-xl border border-brand-border/30 mt-1">
-                <div className="w-5 h-5 rounded-full border-2 border-brand-purple/20 border-t-brand-purple animate-spin"></div>
-                <span className="text-[11px] text-brand-purple-light font-bold tracking-wide">
-                  {loadingStep === 'mapping' ? 'Mapping dependency graph...' : 'Formulating diagnostic query...'}
+              <div className="relative overflow-hidden w-full h-[52px] rounded-xl bg-[#0b0e1a]/80 border border-brand-purple/20 flex items-center justify-center gap-2.5 shadow-[0_0_20px_rgba(139,92,246,0.1)] mt-1">
+                <div className="shimmer-bg"></div>
+                <div className="w-4 h-4 rounded-full border-2 border-brand-purple-light/20 border-t-brand-purple-light animate-spin z-10"></div>
+                <span className="text-xs font-bold text-brand-purple-light uppercase tracking-wider animate-pulse z-10">
+                  Mapping Topic Graph...
                 </span>
               </div>
             ) : (

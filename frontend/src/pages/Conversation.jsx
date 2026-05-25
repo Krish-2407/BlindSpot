@@ -25,22 +25,64 @@ export default function Conversation() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chatHistory])
 
-  // Sync initial userModel from context snapshot
+  // Initialize userModel from last chat history snapshot or masterGraph nodes
   useEffect(() => {
     if (chatHistory && chatHistory.length > 0) {
       const lastMsg = chatHistory[chatHistory.length - 1]
       if (lastMsg.userModelSnapshot) {
         setUserModel(lastMsg.userModelSnapshot)
-      } else if (masterGraph && masterGraph.nodes) {
-        // Initialize default userModel if none exists yet
-        setUserModel(masterGraph.nodes.map(node => ({
-          id: node.id,
-          confidence: 0.0,
-          evidence: 'Initial state'
-        })))
+        return
       }
     }
-  }, [chatHistory, masterGraph])
+    if (masterGraph && masterGraph.nodes && userModel.length === 0) {
+      setUserModel(masterGraph.nodes.map(node => ({
+        id: node.id,
+        confidence: 0.0,
+        evidence: 'Initial state'
+      })))
+    }
+  }, [chatHistory, masterGraph, userModel.length])
+
+  // Auto-bootstrap Socratic chat if history is empty
+  useEffect(() => {
+    if (activeTopic && sessionId && chatHistory.length === 0 && !loading) {
+      const bootstrapSession = async () => {
+        setLoading(true)
+        const initialMessage = `I want to evaluate my understanding of ${activeTopic}.`
+        
+        // Add user's initial message locally
+        const updatedHistory = [
+          { role: 'user', content: initialMessage }
+        ]
+        setChatHistory(updatedHistory)
+
+        try {
+          const response = await axios.post(`${API_URL}/api/agent2`, {
+            sessionId,
+            messages: [],
+            userMessage: initialMessage
+          })
+          const { reply, updatedUserModel } = response.data
+          setChatHistory([
+            ...updatedHistory,
+            { role: 'assistant', content: reply, userModelSnapshot: updatedUserModel }
+          ])
+          if (updatedUserModel) {
+            setUserModel(updatedUserModel)
+          }
+        } catch (err) {
+          console.error('Failed to bootstrap Socratic session:', err)
+          setChatHistory([
+            ...updatedHistory,
+            { role: 'assistant', content: 'Could not connect to Socratic Tutor. Please check if backend is running.' }
+          ])
+        } finally {
+          setLoading(false)
+        }
+      }
+      bootstrapSession()
+    }
+  }, [activeTopic, sessionId, chatHistory.length, loading, setChatHistory, API_URL])
 
   const handleSend = async (e) => {
     e.preventDefault()
@@ -349,8 +391,8 @@ export default function Conversation() {
                   <span>Weak (1-39%)</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-gray-600"></span>
-                  <span>Not Explored</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                  <span>Not Explored / Gap</span>
                 </div>
               </div>
             </div>
@@ -364,19 +406,19 @@ export default function Conversation() {
                   const score = modelState ? modelState.confidence : 0.0
                   const isExplored = modelState && modelState.evidence !== 'Initial state'
 
-                  let badgeColorClass = 'border-gray-800 bg-brand-dark text-gray-500'
-                  let glowClass = ''
+                  let badgeColorClass = 'border-red-500/20 bg-red-500/10 text-red-400'
+                  let glowClass = 'glow-error border-red-500/50'
 
                   if (isExplored) {
                     if (score >= 0.7) {
                       badgeColorClass = 'border-brand-emerald/20 bg-brand-emerald/10 text-brand-emerald'
-                      glowClass = 'glow-success'
+                      glowClass = 'glow-success border-brand-emerald/50'
                     } else if (score >= 0.4) {
                       badgeColorClass = 'border-brand-purple/20 bg-brand-purple/10 text-brand-purple-light'
-                      glowClass = 'glow-primary'
-                    } else {
+                      glowClass = 'glow-primary border-brand-purple/50'
+                    } else if (score > 0.0) {
                       badgeColorClass = 'border-yellow-500/20 bg-yellow-500/10 text-yellow-400'
-                      glowClass = 'glow-warning'
+                      glowClass = 'glow-warning border-yellow-500/50'
                     }
                   }
 
