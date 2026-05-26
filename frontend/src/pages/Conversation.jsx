@@ -102,7 +102,6 @@ export default function Conversation() {
     try {
       const response = await axios.post(`${API_URL}/api/agent2`, {
         sessionId,
-        messages: chatHistory.map(m => ({ role: m.role, content: m.content })),
         userMessage: userMsgText
       })
 
