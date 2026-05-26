@@ -35,11 +35,6 @@ function generateFallbackReply(userMessage, conceptsList, turnNumber) {
 
 router.post('/', async (req, res) => {
   try {
-    console.log('Agent 2 hit - body received:', req.body)
-    console.log('sessionId:', req.body.sessionId)
-    console.log('userMessage:', req.body.userMessage)
-    console.log('messages length:', req.body.messages?.length)
-
     const { sessionId, messages, userMessage } = req.body;
 
     // 1. Validate request body fields
@@ -50,32 +45,22 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Missing or invalid required field: userMessage' });
     }
 
-    // 2. Fetch session and expert graph
-    let sessionData;
-    let sessionError;
-    try {
-      console.log('Fetching session from Supabase...')
-      const { data: session, error } = await supabase
-        .from('sessions')
-        .select('expert_graph')
-        .eq('id', req.body.sessionId)
-        .maybeSingle()
-        
-      console.log('Session fetch result:', session, 'Error:', error)
-      sessionData = session;
-      sessionError = error;
-    } catch (dbError) {
-      console.error('Supabase fetch failed:', dbError)
-      sessionError = dbError;
-    }
+    // Step 1 - Log sessionId received
+    console.log('Agent 2 - sessionId received:', sessionId)
 
-    if (sessionError) {
+    // Step 2 - Fetch the session from Supabase
+    const { data: sessionData, error: sessionError } = await supabase
+      .from('sessions')
+      .select('expert_graph, topic')
+      .eq('id', sessionId)
+      .single()
+
+    console.log('Agent 2 - session fetched:', sessionData?.topic)
+    console.log('Agent 2 - expert_graph nodes:', sessionData?.expert_graph?.nodes?.length)
+
+    if (sessionError || !sessionData) {
       console.error('Supabase fetch session error:', sessionError);
-      return res.status(500).json({ error: 'Failed to retrieve session from database', details: sessionError.message || String(sessionError) });
-    }
-
-    if (!sessionData) {
-      return res.status(404).json({ error: 'Session not found' });
+      return res.status(404).json({ error: 'Session not found' })
     }
 
     const expertGraph = sessionData.expert_graph || { nodes: [], edges: [] };
@@ -143,7 +128,7 @@ Turn 3: Ask why something works the way it does
 Turn 4: Ask about a common mistake beginners make
 Turn 5: Ask about the most advanced concept they haven't touched
 
-Expert knowledge graph for reference: ${JSON.stringify(expertGraph, null, 2)}
+Expert knowledge graph for reference: ${JSON.stringify(expertGraph)}
 
 After each user message, score their confidence on 
 concepts they touched. Be honest — if they said 
@@ -199,7 +184,12 @@ ${historyText}`;
     }
 
     // 8. Merge confidence updates into userModel
+    const validConceptIds = (expertGraph.nodes || []).map(node => node.id);
     for (const update of confidenceUpdates) {
+      if (!validConceptIds.includes(update.id)) {
+        console.warn(`Agent 2 - Ignored out-of-graph concept update: ${update.id}`);
+        continue;
+      }
       const idx = userModel.findIndex(item => item.id === update.id);
       if (idx !== -1) {
         userModel[idx] = {
@@ -208,7 +198,6 @@ ${historyText}`;
           evidence: update.evidence || userModel[idx].evidence
         };
       } else {
-        // Concept wasn't in initial list, but was updated. Add it anyway.
         userModel.push({
           id: update.id,
           confidence: typeof update.confidence === 'number' ? update.confidence : 0.0,

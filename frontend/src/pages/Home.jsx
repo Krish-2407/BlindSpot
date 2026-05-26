@@ -23,8 +23,12 @@ export default function Home() {
     setLoadingStep('mapping')
 
     try {
-      // Clear any prior chat history first
+      // Clear prior state and storage using context setters
       setChatHistory([])
+      setSessionId(null)
+      setActiveTopic('')
+      setMasterGraph(null)
+      localStorage.removeItem('blindspot_session_id')
 
       // Call Agent 1 to build the concept dependency graph
       const response = await axios.post(`${API_URL}/api/agent1`, {
@@ -37,11 +41,7 @@ export default function Home() {
       // Capture expertGraph regardless of casing format from backend
       const graphData = expertGraph || response.data.expert_graph
 
-      // Save to localStorage for persistence across page updates
-      localStorage.setItem('blindspot_session_id', sessionId)
-      localStorage.setItem('blindspot_topic', topic.trim())
-      localStorage.setItem('blindspot_expert_graph', JSON.stringify(graphData))
-
+      // Context setters will synchronously update state and localStorage
       setSessionId(sessionId)
       setActiveTopic(topic.trim())
       setMasterGraph(graphData)
@@ -50,7 +50,7 @@ export default function Home() {
       navigate('/conversation')
     } catch (err) {
       console.error(err)
-      setError(err.response?.data?.error || 'An error occurred during session initialization. Please make sure the backend is running.')
+      setError('Something went wrong. Please try again.')
     } finally {
       setLoading(false)
       setLoadingStep('')
@@ -239,14 +239,6 @@ export default function Home() {
           {/* Form Card */}
           <form onSubmit={handleSubmit} className="w-full bg-brand-card/70 backdrop-blur-xl border border-brand-border/50 rounded-2xl p-5 md:p-6 shadow-[0_0_60px_rgba(139,92,246,0.1)] relative z-10 flex flex-col gap-4">
             
-            {/* Error Message */}
-            {error && (
-              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-[11px] text-red-400 flex items-start gap-2">
-                <i className="fa-solid fa-triangle-exclamation mt-0.5"></i>
-                <p>{error}</p>
-              </div>
-            )}
-
             {/* Topic Input */}
             <div>
               <label className="block text-[12px] font-bold text-gray-300 uppercase tracking-widest mb-1.5 ml-0.5">Topic</label>
@@ -286,34 +278,41 @@ export default function Home() {
             </div>
 
             {/* Actions/Submit inside form for tighter alignment */}
-            {loading ? (
-              <div className="relative overflow-hidden w-full h-[52px] rounded-xl bg-[#0b0e1a]/80 border border-brand-purple/20 flex items-center justify-center gap-2.5 shadow-[0_0_20px_rgba(139,92,246,0.1)] mt-1">
-                <div className="shimmer-bg"></div>
-                <div className="w-4 h-4 rounded-full border-2 border-brand-purple-light/20 border-t-brand-purple-light animate-spin z-10"></div>
-                <span className="text-xs font-bold text-brand-purple-light uppercase tracking-wider animate-pulse z-10">
-                  Mapping Topic Graph...
-                </span>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3 mt-1">
-                <button
-                  type="submit"
-                  disabled={!topic.trim()}
-                  className="group relative w-full overflow-hidden rounded-xl bg-gradient-to-r from-brand-purple to-indigo-600 p-[1px] transition-all hover:scale-[1.01] active:scale-95 shadow-[0_0_20px_rgba(139,92,246,0.2)] disabled:opacity-50 disabled:scale-100 disabled:shadow-none"
-                >
-                  <div className="relative flex items-center justify-center gap-1.5 rounded-[11px] bg-gradient-to-r from-brand-purple to-indigo-600 px-6 py-2.5 transition-all group-hover:from-brand-purple-light group-hover:to-brand-purple-dark">
-                    <i className="fa-solid fa-graduation-cap text-white text-xs"></i>
-                    <span className="text-[15px] font-extrabold text-white">Reveal My Blind Spots</span>
-                    <i className="fa-solid fa-arrow-right text-white text-xs transition-transform group-hover:translate-x-0.5"></i>
-                  </div>
-                </button>
-
-                <div className="flex items-center justify-center gap-1 text-[10px] text-gray-500 font-semibold">
-                  <i className="fa-solid fa-circle-check text-brand-emerald"></i>
-                  <span>AI analyzes understanding across 100+ dimensions</span>
+            <div className="flex flex-col gap-3 mt-1">
+              <button
+                type="submit"
+                disabled={loading || !topic.trim()}
+                className="group relative w-full overflow-hidden rounded-xl bg-gradient-to-r from-brand-purple to-indigo-600 p-[1px] transition-all hover:scale-[1.01] active:scale-95 shadow-[0_0_20px_rgba(139,92,246,0.2)] disabled:opacity-50 disabled:scale-100 disabled:shadow-none"
+              >
+                <div className="relative flex items-center justify-center gap-2 rounded-[11px] bg-gradient-to-r from-brand-purple to-indigo-600 px-6 py-2.5 transition-all group-hover:from-brand-purple-light group-hover:to-brand-purple-dark">
+                  {loading ? (
+                    <>
+                      <div className="w-4 h-4 rounded-full border-2 border-white/20 border-t-white animate-spin"></div>
+                      <span className="text-[15px] font-extrabold text-white">Building your knowledge map...</span>
+                    </>
+                  ) : (
+                    <>
+                      <i className="fa-solid fa-graduation-cap text-white text-xs"></i>
+                      <span className="text-[15px] font-extrabold text-white">Reveal My Blind Spots</span>
+                      <i className="fa-solid fa-arrow-right text-white text-xs transition-transform group-hover:translate-x-0.5"></i>
+                    </>
+                  )}
                 </div>
+              </button>
+
+              {/* Error Message */}
+              {error && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-[11px] text-red-400 flex items-start gap-2 animate-pulse">
+                  <i className="fa-solid fa-triangle-exclamation mt-0.5"></i>
+                  <p>{error}</p>
+                </div>
+              )}
+
+              <div className="flex items-center justify-center gap-1 text-[10px] text-gray-500 font-semibold">
+                <i className="fa-solid fa-circle-check text-brand-emerald"></i>
+                <span>AI analyzes understanding across 100+ dimensions</span>
               </div>
-            )}
+            </div>
           </form>
         </div>
       </main>

@@ -4,9 +4,14 @@ const FlowContext = createContext(null)
 
 export function FlowProvider({ children }) {
   const [activeScreen, setActiveScreenState] = useState('home')
-  const [sessionId, setSessionId] = useState(null)
-  const [activeTopic, setActiveTopic] = useState('')
-  const [masterGraph, setMasterGraph] = useState(null)
+  
+  // Initialize state from localStorage to survive page refreshes
+  const [sessionId, setSessionIdState] = useState(() => localStorage.getItem('blindspot_session_id'))
+  const [activeTopic, setActiveTopicState] = useState(() => localStorage.getItem('blindspot_topic') || '')
+  const [masterGraph, setMasterGraphState] = useState(() => {
+    const saved = localStorage.getItem('blindspot_expert_graph')
+    return saved ? JSON.parse(saved) : null
+  })
   const [chatHistory, setChatHistory] = useState([])
 
   // Helper to sync route changes with screen state
@@ -14,12 +19,43 @@ export function FlowProvider({ children }) {
     setActiveScreenState(screen)
   }, [])
 
+  // Wrapped state setters that keep localStorage in sync
+  const setSessionId = useCallback((id) => {
+    setSessionIdState(id)
+    if (id) {
+      localStorage.setItem('blindspot_session_id', id)
+    } else {
+      localStorage.removeItem('blindspot_session_id')
+    }
+  }, [])
+
+  const setActiveTopic = useCallback((topic) => {
+    setActiveTopicState(topic)
+    if (topic) {
+      localStorage.setItem('blindspot_topic', topic)
+    } else {
+      localStorage.removeItem('blindspot_topic')
+    }
+  }, [])
+
+  const setMasterGraph = useCallback((graph) => {
+    setMasterGraphState(graph)
+    if (graph) {
+      localStorage.setItem('blindspot_expert_graph', JSON.stringify(graph))
+    } else {
+      localStorage.removeItem('blindspot_expert_graph')
+    }
+  }, [])
+
   const resetFlow = useCallback(() => {
     setActiveScreenState('home')
-    setSessionId(null)
-    setActiveTopic('')
-    setMasterGraph(null)
+    setSessionIdState(null)
+    setActiveTopicState('')
+    setMasterGraphState(null)
     setChatHistory([])
+    localStorage.removeItem('blindspot_session_id')
+    localStorage.removeItem('blindspot_topic')
+    localStorage.removeItem('blindspot_expert_graph')
   }, [])
 
   const value = {

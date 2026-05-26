@@ -131,47 +131,87 @@ router.post('/', async (req, res) => {
     }
 
     // 2. Prepare Gemini Prompt
-    const prompt = `You are the Expert Knowledge Mapper (Agent 1).
-Build a concept dependency graph for the topic: "${topic}".
-User's opening explanation/context: "${openingExplanation || 'None'}"
+    const prompt = `You are an expert educator and knowledge graph builder.
+Generate a comprehensive concept dependency graph for 
+the topic: ${topic}
 
-The graph must represent a detailed learning path containing 15-25 nodes representing key concepts (ordered logically from fundamental to advanced).
-Each node must have:
-- id: a unique identifier in kebab-case (e.g. "closures")
-- label: a short, clear human-readable name (e.g. "Closures")
-- unlock_score: a number from 1.0 to 10.0 representing how many downstream concepts depend on or are unlocked by this concept
-- description: a concise 1-sentence definition of the concept
+You MUST generate between 15 and 25 concept nodes.
+This is mandatory. Do not generate fewer than 15 nodes.
 
-The edges represent prerequisite relationships. The "from" node must be a prerequisite for the "to" node.
-Format your output exactly as a single JSON object.
+Think about everything a true expert in ${topic} would know:
+- Foundational basics
+- Core concepts
+- Intermediate patterns
+- Advanced topics
+- Common pitfalls and edge cases
 
-Example JSON output structure:
+Return ONLY valid JSON. No markdown. No backticks. 
+No explanation. Start directly with { and end with }
+
+Use exactly this structure:
 {
   "nodes": [
-    { "id": "functions", "label": "Functions", "unlock_score": 9.5, "description": "Reusable blocks of code performing specific tasks." },
-    { "id": "closures", "label": "Closures", "unlock_score": 8.0, "description": "A function that retains access to its outer lexical scope." }
+    {
+      "id": lowercase_underscore_string,
+      "label": Human Readable Name,
+      "description": one sentence what this concept is,
+      "unlock_score": number between 1 and 10,
+      "depth": 1 for basic, 2 for intermediate, 3 for advanced
+    }
   ],
   "edges": [
+    {
+      "from": concept_id_that_must_be_learned_first,
+      "to": concept_id_that_depends_on_it
+    }
+  ]
+}
+
+Example for topic JavaScript:
+{
+  "nodes": [
+    { "id": "variables", "label": "Variables & Data Types", "description": "Storing and typing data in JS", "unlock_score": 9, "depth": 1 },
+    { "id": "functions", "label": "Functions", "description": "Reusable blocks of logic", "unlock_score": 8, "depth": 1 },
+    { "id": "closures", "label": "Closures", "description": "Functions retaining outer scope", "unlock_score": 7, "depth": 2 }
+  ],
+  "edges": [
+    { "from": "variables", "to": "functions" },
     { "from": "functions", "to": "closures" }
   ]
 }
 
-Respond ONLY in valid JSON. No markdown. No explanation. No backticks.`;
+Now generate the full graph for: ${topic}
+Remember: minimum 15 nodes, maximum 25 nodes.`;
 
     let expertGraph;
     try {
       // 3. Call Gemini API
       const result = await geminiModel.generateContent(prompt);
       const response = await result.response;
-      let text = response.text().trim();
+      let rawText = response.text().trim();
 
       // Remove markdown code fence wrappers if present
-      if (text.startsWith('```')) {
-        text = text.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
+      if (rawText.startsWith('```')) {
+        rawText = rawText.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
       }
 
-      // 4. Parse the output
-      expertGraph = JSON.parse(text);
+      // Step 1: Parse
+      const parsedGraph = JSON.parse(rawText);
+
+      console.log('Agent 1 - topic received:', topic);
+      console.log('Agent 1 - raw Gemini response:', rawText);
+      console.log('Agent 1 - parsed nodes count:', parsedGraph?.nodes?.length);
+      console.log('Agent 1 - parsed edges count:', parsedGraph?.edges?.length);
+
+      // Step 3 - Validation
+      if (!parsedGraph.nodes || parsedGraph.nodes.length < 5) {
+        console.error('Agent 1 - Too few nodes generated:', parsedGraph.nodes?.length);
+        return res.status(500).json({ 
+          error: 'Failed to generate proper knowledge graph. Please try again.' 
+        });
+      }
+
+      expertGraph = parsedGraph;
     } catch (apiError) {
       console.warn('Gemini API call failed or rate-limited. Falling back to dynamic mock graph. Error:', apiError.message);
       expertGraph = generateFallbackGraph(topic);

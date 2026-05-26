@@ -6,8 +6,7 @@ import axios from 'axios'
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
 export default function Conversation() {
-  const { activeTopic, masterGraph, chatHistory, setChatHistory, setActiveScreen } = useFlow()
-  const sessionId = localStorage.getItem('blindspot_session_id')
+  const { sessionId, activeTopic, masterGraph, chatHistory, setChatHistory, setActiveScreen } = useFlow()
   const navigate = useNavigate()
   const [inputText, setInputText] = useState('')
   const [loading, setLoading] = useState(false)
@@ -75,7 +74,7 @@ export default function Conversation() {
           console.error('Failed to bootstrap Socratic session:', err)
           setChatHistory([
             ...updatedHistory,
-            { role: 'assistant', content: 'Could not connect to Socratic Tutor. Please check if backend is running.' }
+            { role: 'assistant', content: 'I had trouble processing that. Please try again.' }
           ])
         } finally {
           setLoading(false)
@@ -100,9 +99,13 @@ export default function Conversation() {
     ]
     setChatHistory(updatedHistory)
 
+    // Filter out error messages from context history to maintain Gemini consistency
+    const cleanHistory = chatHistory.filter(m => m.role === 'user' || (m.role === 'assistant' && m.userModelSnapshot))
+
     try {
       const response = await axios.post(`${API_URL}/api/agent2`, {
         sessionId,
+        messages: cleanHistory,
         userMessage: userMsgText
       })
 
@@ -117,7 +120,7 @@ export default function Conversation() {
       console.error(err)
       setChatHistory([
         ...updatedHistory,
-        { role: 'assistant', content: 'Sorry, I encountered an issue analyzing your response. Please try again.' }
+        { role: 'assistant', content: 'I had trouble processing that. Please try again.' }
       ])
     } finally {
       setLoading(false)
@@ -322,7 +325,7 @@ export default function Conversation() {
                 <div className="flex justify-start">
                   <div className="bg-[#131b2e]/60 border border-brand-border/20 rounded-2xl rounded-tl-none px-4 py-3 flex items-center gap-2 text-xs text-brand-purple-light">
                     <div className="w-3.5 h-3.5 border-2 border-brand-purple/20 border-t-brand-purple rounded-full animate-spin"></div>
-                    <span>AI is diagnosing your response...</span>
+                    <span>BlindSpot is thinking...</span>
                   </div>
                 </div>
               )}

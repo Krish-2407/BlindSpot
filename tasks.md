@@ -78,24 +78,24 @@ results (
 ---
 
 ## Phase 3 — Pipeline Integration (Day 3 — MVP due Wednesday)
-- [ ] Build `routes/agent3.js` — Gap Ranker endpoint
+- [x] Build `routes/agent3.js` — Gap Ranker endpoint
       - Accepts: `{ sessionId }`
       - Reads expert graph and user model from Supabase
       - Runs BFS traversal to calculate unlock scores
       - Calls Gemini to score confusion multiplier
       - Saves ranked gaps to Supabase `results` table
       - Returns: `{ rankedGaps }`
-- [ ] Build `routes/agent4.js` — Socratic Output endpoint
+- [x] Build `routes/agent4.js` — Socratic Output endpoint
       - Accepts: `{ sessionId }`
       - Reads ranked gaps from Supabase
       - Calls Gemini to generate Socratic questions
       - Runs self-critique loop on each question
       - Saves questions to Supabase `results` table
       - Returns: `{ questions }`
-- [ ] Wire Screen 2 "See my blind spots" button to call Agent 3 then Agent 4 in sequence
-- [ ] Wire Screen 3 to read and display real data from Agent 4 output
+- [x] Wire Screen 2 "See my blind spots" button to call Agent 3 then Agent 4 in sequence
+- [x] Wire Screen 3 to read and display real data from Agent 4 output
 - [ ] Replace Screen 3 placeholder gap map with basic D3.js node graph
-- [ ] End-to-end test: full flow from topic input to results page
+- [x] End-to-end test: full flow from topic input to results page
 - [ ] Record screen demo and write product brief (3-4 sentences)
 - [ ] ⚠️ SUBMIT MVP — product brief + working demo by end of Wednesday
 

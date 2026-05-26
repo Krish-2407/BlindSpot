@@ -6,7 +6,7 @@ import axios from 'axios'
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
 export default function Results() {
-  const { activeTopic, masterGraph, chatHistory, resetFlow } = useFlow()
+  const { sessionId, activeTopic, masterGraph, chatHistory, resetFlow } = useFlow()
   const navigate = useNavigate()
   
   const [loading, setLoading] = useState(true)
@@ -17,40 +17,39 @@ export default function Results() {
   const [questions, setQuestions] = useState([])
   const [learningPath, setLearningPath] = useState([])
 
-  // Fetch results on component mount
-  useEffect(() => {
-    const sessionId = localStorage.getItem('blindspot_session_id')
+  const fetchResultsData = async () => {
     if (!sessionId) {
       setError('No session found. Please start a new assessment.')
       setLoading(false)
       return
     }
 
-    const fetchResultsData = async () => {
-      try {
-        setLoading(true)
-        setError(null)
+    try {
+      setLoading(true)
+      setError(null)
 
-        // Step 2 - Sequential API calls
-        // Call Agent 3 Gap Ranker
-        const agent3Res = await axios.post(`${API_URL}/api/agent3`, { sessionId })
-        const fetchedRankedGaps = agent3Res.data.rankedGaps || []
-        setRankedGaps(fetchedRankedGaps)
+      // Step 2 - Sequential API calls
+      // Call Agent 3 Gap Ranker
+      const agent3Res = await axios.post(`${API_URL}/api/agent3`, { sessionId })
+      const fetchedRankedGaps = agent3Res.data.rankedGaps || []
+      setRankedGaps(fetchedRankedGaps)
 
-        // Call Agent 4 Socratic Output
-        const agent4Res = await axios.post(`${API_URL}/api/agent4`, { sessionId })
-        const { questions: fetchedQuestions, learningPath: fetchedLearningPath } = agent4Res.data
-        setQuestions(fetchedQuestions || [])
-        setLearningPath(fetchedLearningPath || [])
+      // Call Agent 4 Socratic Output
+      const agent4Res = await axios.post(`${API_URL}/api/agent4`, { sessionId })
+      const { questions: fetchedQuestions, learningPath: fetchedLearningPath } = agent4Res.data
+      setQuestions(fetchedQuestions || [])
+      setLearningPath(fetchedLearningPath || [])
 
-        setLoading(false)
-      } catch (err) {
-        console.error('Error fetching results:', err)
-        setError('Something went wrong loading your results. Please try again.')
-        setLoading(false)
-      }
+      setLoading(false)
+    } catch (err) {
+      console.error('Error fetching results:', err)
+      setError("We couldn't load your results. Please go back and try again.")
+      setLoading(false)
     }
+  }
 
+  // Fetch results on component mount
+  useEffect(() => {
     fetchResultsData()
   }, [])
 
@@ -61,35 +60,48 @@ export default function Results() {
 
   if (loading) {
     return (
-      <div className="bg-[#020617] text-[#dae2fd] font-sans min-h-screen flex flex-col items-center justify-center antialiased">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-brand-purple/20 border-t-brand-purple rounded-full animate-spin glow-primary"></div>
-          <p className="text-sm font-semibold text-brand-purple-light tracking-wide animate-pulse">Analyzing Socratic dialogue & ranking gaps...</p>
+      <div className="bg-[#020617] text-[#dae2fd] font-sans min-h-screen flex flex-col items-center justify-center antialiased relative overflow-hidden">
+        {/* Subtle decorative glow in background */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-brand-purple/10 rounded-full blur-[100px] pointer-events-none"></div>
+        <div className="flex flex-col items-center gap-5 relative z-10">
+          <div className="w-12 h-12 border-4 border-brand-purple/20 border-t-brand-purple rounded-full animate-spin shadow-[0_0_15px_rgba(168,85,247,0.4)]"></div>
+          <div className="text-center">
+            <p className="text-base font-bold text-white tracking-wide animate-pulse">Analyzing your knowledge gaps...</p>
+            <p className="text-xs text-brand-purple-light font-medium mt-1 animate-pulse delay-75">Mapping your blind spots...</p>
+          </div>
         </div>
       </div>
     )
   }
 
   if (error) {
+    const isApiError = error.includes("couldn't load your results");
     return (
       <div className="bg-[#020617] text-[#dae2fd] font-sans min-h-screen flex flex-col items-center justify-center antialiased">
         <div className="glass-card rounded-2xl p-8 max-w-md w-full text-center border border-red-500/20 relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-1 bg-red-500"></div>
           <span className="material-symbols-outlined text-red-500 text-4xl mb-4" style={{ fontVariationSettings: "'FILL' 1" }}>error</span>
-          <h2 className="text-lg font-bold text-white mb-2">Error</h2>
+          <h2 className="text-lg font-bold text-white mb-2">{isApiError ? 'Connection Error' : 'Error'}</h2>
           <p className="text-sm text-gray-400 mb-6 leading-relaxed">{error}</p>
-          <button 
-            onClick={() => {
-              resetFlow()
-              localStorage.removeItem('blindspot_session_id')
-              localStorage.removeItem('blindspot_topic')
-              localStorage.removeItem('blindspot_expert_graph')
-              navigate('/')
-            }}
-            className="bg-brand-purple hover:bg-brand-purple-light text-white text-xs font-semibold px-6 py-2.5 rounded-full transition-all duration-100 glow-primary"
-          >
-            Start New Assessment
-          </button>
+          <div className="flex justify-center gap-4">
+            {isApiError && (
+              <button 
+                onClick={fetchResultsData}
+                className="bg-brand-purple hover:bg-brand-purple-light text-white text-xs font-semibold px-6 py-2.5 rounded-full transition-all duration-100 glow-primary active:scale-95 shadow-md"
+              >
+                Try Again
+              </button>
+            )}
+            <button 
+              onClick={() => {
+                resetFlow()
+                navigate('/')
+              }}
+              className="bg-[#140e28] hover:bg-brand-border text-gray-300 text-xs font-semibold px-6 py-2.5 rounded-full transition-all duration-100 active:scale-95 border border-brand-border"
+            >
+              Start New Assessment
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -141,9 +153,6 @@ export default function Results() {
 
   const handleReset = () => {
     resetFlow()
-    localStorage.removeItem('blindspot_session_id')
-    localStorage.removeItem('blindspot_topic')
-    localStorage.removeItem('blindspot_expert_graph')
     navigate('/')
   }
 
@@ -164,6 +173,21 @@ export default function Results() {
         .glow-primary-intense { box-shadow: 0 0 25px rgba(168, 85, 247, 0.35); }
         .glow-emerald { box-shadow: 0 0 15px rgba(16, 185, 129, 0.2); }
         .glow-error { box-shadow: 0 0 15px rgba(239, 68, 68, 0.2); }
+        
+        @keyframes fadeInUp {
+          from {
+            opacity: 0;
+            transform: translateY(16px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .animate-card-in {
+          opacity: 0;
+          animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
       `}} />
 
       {/* TopAppBar */}
@@ -210,7 +234,7 @@ export default function Results() {
         {/* Summary Stats Grid */}
         <section className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-5 w-full">
           {/* Overall Understanding */}
-          <div className="glass-card rounded-2xl p-5 flex flex-col items-center md:items-start gap-4">
+          <div className="glass-card rounded-2xl p-5 flex flex-col items-center md:items-start gap-4 animate-card-in" style={{ animationDelay: '100ms' }}>
             <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Overall Understanding</div>
             <div className="flex items-center gap-4 w-full">
               <div className="relative w-14 h-14 flex-shrink-0">
@@ -237,7 +261,7 @@ export default function Results() {
           </div>
 
           {/* Socratic Dialogue Turns */}
-          <div className="glass-card rounded-2xl p-5 flex flex-col gap-2 justify-between">
+          <div className="glass-card rounded-2xl p-5 flex flex-col gap-2 justify-between animate-card-in" style={{ animationDelay: '200ms' }}>
             <div className="flex items-center gap-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
               <span className="material-symbols-outlined text-brand-purple-light text-sm">forum</span>
               Socratic Turns
@@ -249,7 +273,7 @@ export default function Results() {
           </div>
 
           {/* Mastered Concepts */}
-          <div className="glass-card rounded-2xl p-5 flex flex-col gap-2 justify-between">
+          <div className="glass-card rounded-2xl p-5 flex flex-col gap-2 justify-between animate-card-in" style={{ animationDelay: '300ms' }}>
             <div className="flex items-center gap-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
               <span className="material-symbols-outlined text-brand-emerald text-sm">task_alt</span>
               Mastered Concepts
@@ -261,7 +285,7 @@ export default function Results() {
           </div>
 
           {/* Blind Spots */}
-          <div className="glass-card rounded-2xl p-5 flex flex-col gap-2 justify-between border-red-500/20 relative overflow-hidden">
+          <div className="glass-card rounded-2xl p-5 flex flex-col gap-2 justify-between border-red-500/20 relative overflow-hidden animate-card-in" style={{ animationDelay: '400ms' }}>
             <div className="absolute top-0 left-0 w-full h-1 bg-red-500"></div>
             <div className="flex items-center gap-1.5 text-[10px] font-semibold text-red-400 uppercase tracking-widest">
               <span className="material-symbols-outlined text-sm">warning</span>
@@ -278,7 +302,7 @@ export default function Results() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
           {/* Concept Map visualizer */}
-          <div className="lg:col-span-2 glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[380px]">
+          <div className="lg:col-span-2 glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[380px] animate-card-in" style={{ animationDelay: '500ms' }}>
             <div>
               <h2 className="text-lg font-bold text-white mb-1">Concept Dependency Map</h2>
               <p className="text-[11px] text-gray-500">
@@ -355,7 +379,7 @@ export default function Results() {
           </div>
 
           {/* Section 1 — Blind Spot Questions */}
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-6 animate-card-in" style={{ animationDelay: '600ms' }}>
             <div className="glass-card rounded-2xl p-6 flex-grow flex flex-col gap-4">
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
                 Your Top Blind Spots
@@ -369,7 +393,11 @@ export default function Results() {
                 {questions && questions.length > 0 ? (
                   questions.map((q, idx) => {
                     return (
-                      <div key={q.concept || idx} className="bg-[#0b0f19] border border-brand-border/40 hover:border-brand-purple/45 rounded-xl p-3.5 transition-all">
+                      <div 
+                        key={q.concept || idx} 
+                        className="bg-[#0b0f19] border border-brand-border/40 hover:border-brand-purple/45 rounded-xl p-3.5 transition-all animate-card-in"
+                        style={{ animationDelay: `${700 + idx * 100}ms` }}
+                      >
                         <div className="flex justify-between items-center mb-1">
                           <span className="text-[9px] bg-brand-purple/10 text-brand-purple-light px-1.5 py-0.5 rounded border border-brand-purple/20 font-bold uppercase">Question {String(idx + 1).padStart(2, '0')}</span>
                           <span className="text-[9px] text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded font-semibold uppercase">{q.label}</span>
@@ -394,7 +422,7 @@ export default function Results() {
         </div>
 
         {/* Section 3 — Gap Summary */}
-        <section className="glass-card rounded-2xl p-6 md:p-8 flex flex-col gap-5 w-full">
+        <section className="glass-card rounded-2xl p-6 md:p-8 flex flex-col gap-5 w-full animate-card-in" style={{ animationDelay: '650ms' }}>
           <h2 className="text-lg font-bold text-white">Diagnosed Gaps</h2>
           <p className="text-[11px] text-gray-500 -mt-2">
             Knowledge gaps identified from your conversation, ranked by severity and priority.
@@ -414,7 +442,11 @@ export default function Results() {
                 }
 
                 return (
-                  <div key={gap.concept || index} className="flex items-center gap-4 w-full">
+                  <div 
+                    key={gap.concept || index} 
+                    className="flex items-center gap-4 w-full animate-card-in"
+                    style={{ animationDelay: `${800 + index * 100}ms` }}
+                  >
                     <div className="w-1/4 text-xs font-semibold text-gray-300 truncate">{gap.label}</div>
                     <div className="flex-grow h-2.5 bg-black/40 rounded-full overflow-hidden border border-brand-border/20">
                       <div className={`h-full rounded-full transition-all duration-300 ${barColor}`} style={{ width: `${Math.max(priority * 10, 5)}%` }}></div>
@@ -432,7 +464,7 @@ export default function Results() {
         </section>
 
         {/* Section 2 — Learning Path */}
-        <section className="glass-card rounded-2xl p-6 md:p-8 flex flex-col gap-5 w-full">
+        <section className="glass-card rounded-2xl p-6 md:p-8 flex flex-col gap-5 w-full animate-card-in" style={{ animationDelay: '700ms' }}>
           <h2 className="text-lg font-bold text-white">Your Learning Path</h2>
           <p className="text-[11px] text-gray-500 -mt-2">
             We've sorted your gaps topologically by their dependency hierarchy. Focus on these steps in order to unlock advanced topics.
@@ -443,7 +475,11 @@ export default function Results() {
               learningPath.map((item, index) => {
                 const unlocksText = Array.isArray(item.unlocks) ? item.unlocks.join(', ') : String(item.unlocks || '')
                 return (
-                  <div key={item.concept || index} className="relative w-full">
+                  <div 
+                    key={item.concept || index} 
+                    className="relative w-full animate-card-in"
+                    style={{ animationDelay: `${900 + index * 100}ms` }}
+                  >
                     <div className="absolute -left-[37px] top-0 w-8 h-8 rounded-full border-2 border-brand-purple bg-[#0F172A] text-brand-purple-light flex items-center justify-center text-xs font-bold z-10 glow-primary">
                       {item.order || (index + 1)}
                     </div>
@@ -455,7 +491,7 @@ export default function Results() {
                 )
               })
             ) : (
-              <div className="relative w-full">
+              <div className="relative w-full animate-card-in" style={{ animationDelay: '900ms' }}>
                 <div className="absolute -left-[37px] top-0 w-8 h-8 rounded-full border-2 border-brand-emerald bg-[#0F172A] flex items-center justify-center text-xs font-bold text-brand-emerald z-10">
                   ✓
                 </div>
