@@ -37,6 +37,11 @@ export default function Home() {
       // Capture expertGraph regardless of casing format from backend
       const graphData = expertGraph || response.data.expert_graph
 
+      // Save to localStorage for persistence across page updates
+      localStorage.setItem('blindspot_session_id', sessionId)
+      localStorage.setItem('blindspot_topic', topic.trim())
+      localStorage.setItem('blindspot_expert_graph', JSON.stringify(graphData))
+
       setSessionId(sessionId)
       setActiveTopic(topic.trim())
       setMasterGraph(graphData)

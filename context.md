@@ -12,9 +12,9 @@ Stack: React + Vite (frontend) · Node + Express (backend) · Gemini API (AI) ·
 ---
 
 ## Current Project State
-**Phase:** Phase 2 — Live Backend Integration & Verification (Complete)
-**Last updated:** Monday (Day 3 — Home and Conversation connected to live Agent 1 & Agent 2 APIs with premium loading shimmer, auto-bootloading, and dynamic database-synced card color rings)
-**Next session goal:** Start Phase 3 — Pipeline Integration (Agent 3 Gap Ranker, Agent 4 Socratic Output, real D3.js node graph)
+**Phase:** Phase 3 — Pipeline Integration (Complete)
+**Last updated:** Tuesday (Day 3 — Mounted pipeline endpoints, wired Results page to live Socratic/Gaps API data, integrated LocalStorage session ID storage, and verified frontend build compiles cleanly)
+**Next session goal:** Start Phase 4 — Polish and Deploy (replace placeholder gap map with a basic D3.js node graph, configure CORS, and prepare staging build)
 
 ---
 
@@ -55,6 +55,8 @@ blindspot/               ← root folder (GitHub repo)
     routes/
       agent1.js          ← implemented
       agent2.js          ← implemented
+      agent3.js          ← implemented
+      agent4.js          ← implemented
     .env
     package.json
     package-lock.json
@@ -92,6 +94,8 @@ blindspot/               ← root folder (GitHub repo)
 - `backend/config/gemini.js`
 - `backend/routes/agent1.js`
 - `backend/routes/agent2.js`
+- `backend/routes/agent3.js`
+- `backend/routes/agent4.js`
 - `backend/server.js`
 - `backend/.env`
 - `backend/package.json`
@@ -133,12 +137,10 @@ VITE_API_URL=http://localhost:3000
 ---
 
 ## What To Build Next
-Phase 3 tasks — in order:
-1. Build `routes/agent3.js` — Gap Ranker endpoint (calculates unlock scores and confusion multipliers)
-2. Build `routes/agent4.js` — Socratic Output endpoint (generates Socratic questions from gaps)
-3. Wire Screen 2 "See my blind spots" button to call Agent 3 then Agent 4 in sequence
-4. Wire Screen 3 to read and display real data from Agent 4 output
-5. Replace Screen 3 placeholder gap map with a basic D3.js node graph
+Phase 4 tasks — in order:
+1. Replace Screen 3 placeholder gap map with a basic D3.js node graph
+2. Configure CORS on Express to allow frontend domains
+3. Add robust frontend loading states and friendly error popups
 
 ---
 

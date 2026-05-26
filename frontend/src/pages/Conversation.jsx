@@ -6,7 +6,8 @@ import axios from 'axios'
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
 export default function Conversation() {
-  const { activeTopic, sessionId, masterGraph, chatHistory, setChatHistory, setActiveScreen } = useFlow()
+  const { activeTopic, masterGraph, chatHistory, setChatHistory, setActiveScreen } = useFlow()
+  const sessionId = localStorage.getItem('blindspot_session_id')
   const navigate = useNavigate()
   const [inputText, setInputText] = useState('')
   const [loading, setLoading] = useState(false)

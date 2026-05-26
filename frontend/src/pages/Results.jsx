@@ -1,52 +1,134 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFlow } from '../context/FlowContext'
+import axios from 'axios'
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
 export default function Results() {
-  const { activeTopic, sessionId, masterGraph, chatHistory, resetFlow } = useFlow()
+  const { activeTopic, masterGraph, chatHistory, resetFlow } = useFlow()
   const navigate = useNavigate()
   
-  const [userModel, setUserModel] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  
+  // Real data state
+  const [rankedGaps, setRankedGaps] = useState([])
+  const [questions, setQuestions] = useState([])
+  const [learningPath, setLearningPath] = useState([])
 
-  // Redirect to home if no topic is active
+  // Fetch results on component mount
   useEffect(() => {
-    if (!activeTopic) {
-      navigate('/')
+    const sessionId = localStorage.getItem('blindspot_session_id')
+    if (!sessionId) {
+      setError('No session found. Please start a new assessment.')
+      setLoading(false)
+      return
     }
-  }, [activeTopic, navigate])
 
-  // Extract user model from last chat history message if available
-  useEffect(() => {
-    if (chatHistory && chatHistory.length > 0) {
-      const lastMsg = chatHistory[chatHistory.length - 1]
-      if (lastMsg.userModelSnapshot) {
-        setUserModel(lastMsg.userModelSnapshot)
+    const fetchResultsData = async () => {
+      try {
+        setLoading(true)
+        setError(null)
+
+        // Step 2 - Sequential API calls
+        // Call Agent 3 Gap Ranker
+        const agent3Res = await axios.post(`${API_URL}/api/agent3`, { sessionId })
+        const fetchedRankedGaps = agent3Res.data.rankedGaps || []
+        setRankedGaps(fetchedRankedGaps)
+
+        // Call Agent 4 Socratic Output
+        const agent4Res = await axios.post(`${API_URL}/api/agent4`, { sessionId })
+        const { questions: fetchedQuestions, learningPath: fetchedLearningPath } = agent4Res.data
+        setQuestions(fetchedQuestions || [])
+        setLearningPath(fetchedLearningPath || [])
+
+        setLoading(false)
+      } catch (err) {
+        console.error('Error fetching results:', err)
+        setError('Something went wrong loading your results. Please try again.')
+        setLoading(false)
       }
     }
-  }, [chatHistory])
 
-  if (!activeTopic) return null
+    fetchResultsData()
+  }, [])
 
-  // Calculate session metrics dynamically
-  const totalTurns = chatHistory.filter(m => m.role === 'user').length
-  const explored = userModel.filter(c => c.confidence > 0 || c.evidence !== 'Initial state')
+  // Restore topic and expert graph from localStorage fallback if missing in context (on reload)
+  const finalTopic = activeTopic || localStorage.getItem('blindspot_topic') || 'Assessment Results'
+  const localGraphText = localStorage.getItem('blindspot_expert_graph')
+  const finalGraph = masterGraph || (localGraphText ? JSON.parse(localGraphText) : null)
+
+  if (loading) {
+    return (
+      <div className="bg-[#020617] text-[#dae2fd] font-sans min-h-screen flex flex-col items-center justify-center antialiased">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-brand-purple/20 border-t-brand-purple rounded-full animate-spin glow-primary"></div>
+          <p className="text-sm font-semibold text-brand-purple-light tracking-wide animate-pulse">Analyzing Socratic dialogue & ranking gaps...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="bg-[#020617] text-[#dae2fd] font-sans min-h-screen flex flex-col items-center justify-center antialiased">
+        <div className="glass-card rounded-2xl p-8 max-w-md w-full text-center border border-red-500/20 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-red-500"></div>
+          <span className="material-symbols-outlined text-red-500 text-4xl mb-4" style={{ fontVariationSettings: "'FILL' 1" }}>error</span>
+          <h2 className="text-lg font-bold text-white mb-2">Error</h2>
+          <p className="text-sm text-gray-400 mb-6 leading-relaxed">{error}</p>
+          <button 
+            onClick={() => {
+              resetFlow()
+              localStorage.removeItem('blindspot_session_id')
+              localStorage.removeItem('blindspot_topic')
+              localStorage.removeItem('blindspot_expert_graph')
+              navigate('/')
+            }}
+            className="bg-brand-purple hover:bg-brand-purple-light text-white text-xs font-semibold px-6 py-2.5 rounded-full transition-all duration-100 glow-primary"
+          >
+            Start New Assessment
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Fallback calculations for statistics (preserves original visual excellence)
+  const graphNodes = finalGraph?.nodes || []
+  const graphEdges = finalGraph?.edges || []
   
-  // Overall score
-  const avgConf = explored.length > 0 
-    ? (explored.reduce((sum, curr) => sum + curr.confidence, 0) / explored.length) 
-    : 0.5 // Fallback average if not enough data
-  const overallScore = Math.round(avgConf * 100)
+  // Reconstruct user model confidence mapping from rankedGaps to power dashboard graphs
+  const userModel = graphNodes.map(node => {
+    const gap = rankedGaps.find(g => g.concept === node.id)
+    if (gap) {
+      // Priority 10 -> confidence 0.1, Priority 1 -> confidence 0.45
+      const calculatedConf = Math.max(0.05, Math.min(0.49, 0.5 - (gap.priority * 0.045)))
+      return {
+        id: node.id,
+        confidence: calculatedConf,
+        evidence: gap.why || 'Identified gap'
+      }
+    }
+    return {
+      id: node.id,
+      confidence: 0.85,
+      evidence: 'Mastered concept'
+    }
+  })
 
-  // Strengths (mastered) & Gaps (blind spots)
+  const totalTurns = chatHistory ? chatHistory.filter(m => m.role === 'user').length : 5
   const strongConcepts = userModel.filter(c => c.confidence >= 0.7)
   const weakConcepts = userModel.filter(c => c.confidence > 0.0 && c.confidence < 0.7)
   const blindSpots = userModel.filter(c => c.confidence < 0.4)
 
-  // Map concepts list
-  const graphNodes = masterGraph?.nodes || []
-  const graphEdges = masterGraph?.edges || []
+  // Overall Score
+  const exploredCount = userModel.length
+  const overallScore = exploredCount > 0 
+    ? Math.round((userModel.reduce((sum, curr) => sum + curr.confidence, 0) / exploredCount) * 100) 
+    : 75
 
-  // Dynamic feedback copy based on score
   let feedbackTitle = 'Good Start!'
   let feedbackCopy = 'You have a solid foundation but have key gaps in advanced areas.'
   if (overallScore >= 80) {
@@ -59,6 +141,9 @@ export default function Results() {
 
   const handleReset = () => {
     resetFlow()
+    localStorage.removeItem('blindspot_session_id')
+    localStorage.removeItem('blindspot_topic')
+    localStorage.removeItem('blindspot_expert_graph')
     navigate('/')
   }
 
@@ -118,7 +203,7 @@ export default function Results() {
             Assessment Verified
           </div>
           <h1 className="text-3xl md:text-4xl font-bold text-white tracking-tight leading-tight">
-            Here's your Socratic understanding report for <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-purple-light to-brand-accent">{activeTopic}</span>
+            Here's your Socratic understanding report for <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-purple-light to-brand-accent">{finalTopic}</span>
           </h1>
         </div>
 
@@ -163,7 +248,7 @@ export default function Results() {
             </div>
           </div>
 
-          {/* Strong Areas */}
+          {/* Mastered Concepts */}
           <div className="glass-card rounded-2xl p-5 flex flex-col gap-2 justify-between">
             <div className="flex items-center gap-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
               <span className="material-symbols-outlined text-brand-emerald text-sm">task_alt</span>
@@ -207,7 +292,7 @@ export default function Results() {
                 {/* Center Node */}
                 <div className="relative z-10 w-16 h-16 bg-[#0c0e1a] border-2 border-brand-purple rounded-full flex items-center justify-center glow-primary-intense">
                   <span className="material-symbols-outlined text-brand-purple-light text-2xl">science</span>
-                  <span className="absolute -bottom-6 text-[10px] font-bold text-brand-purple-light whitespace-nowrap uppercase tracking-wider">{activeTopic.slice(0, 15)}</span>
+                  <span className="absolute -bottom-6 text-[10px] font-bold text-brand-purple-light whitespace-nowrap uppercase tracking-wider">{finalTopic.slice(0, 15)}</span>
                 </div>
 
                 {/* Nodes surrounding it */}
@@ -223,7 +308,6 @@ export default function Results() {
                   const y = Math.round(Math.sin(angle) * radius)
 
                   let borderClass = 'border-gray-700 text-gray-500'
-                  let glowNode = ''
                   if (isExplored) {
                     if (score >= 0.7) {
                       borderClass = 'border-brand-emerald text-brand-emerald glow-emerald'
@@ -270,37 +354,38 @@ export default function Results() {
             </div>
           </div>
 
-          {/* Gaps / Recommended Socratic items list */}
+          {/* Section 1 — Blind Spot Questions */}
           <div className="flex flex-col gap-6">
             <div className="glass-card rounded-2xl p-6 flex-grow flex flex-col gap-4">
               <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                Recommended Questions
-                <span className="text-[9px] uppercase bg-red-500/10 text-red-400 px-2 py-0.5 rounded border border-red-500/20 font-semibold">{blindSpots.length} Gaps</span>
+                Your Top Blind Spots
+                <span className="text-[9px] uppercase bg-red-500/10 text-red-400 px-2 py-0.5 rounded border border-red-500/20 font-semibold">{questions.length} Questions</span>
               </h2>
               <p className="text-[11px] text-gray-500">
                 Top queries to test yourself, designed to unlock dependencies.
               </p>
 
               <div className="space-y-3 max-h-[260px] overflow-y-auto pr-1">
-                {blindSpots.length > 0 ? (
-                  blindSpots.map((spot, idx) => {
-                    const node = graphNodes.find(n => n.id === spot.id)
-                    const label = node ? node.label : spot.id
+                {questions && questions.length > 0 ? (
+                  questions.map((q, idx) => {
                     return (
-                      <div key={spot.id} className="bg-brand-card/50 border border-brand-border/40 hover:border-brand-purple/45 rounded-xl p-3.5 transition-all">
+                      <div key={q.concept || idx} className="bg-[#0b0f19] border border-brand-border/40 hover:border-brand-purple/45 rounded-xl p-3.5 transition-all">
                         <div className="flex justify-between items-center mb-1">
-                          <span className="text-[9px] bg-brand-purple/10 text-brand-purple-light px-1.5 py-0.5 rounded border border-brand-purple/20 font-bold uppercase">Question {idx + 1}</span>
-                          <span className="text-[9px] text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded font-semibold uppercase">Gap: {label}</span>
+                          <span className="text-[9px] bg-brand-purple/10 text-brand-purple-light px-1.5 py-0.5 rounded border border-brand-purple/20 font-bold uppercase">Question {String(idx + 1).padStart(2, '0')}</span>
+                          <span className="text-[9px] text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded font-semibold uppercase">{q.label}</span>
                         </div>
-                        <p className="text-[11px] text-gray-300 leading-relaxed font-light">
-                          How does {label} resolve variables dynamically under heavy async execution constraints?
+                        <p className="text-[12px] text-gray-100 leading-relaxed font-semibold mb-2">
+                          {q.question}
+                        </p>
+                        <p className="text-[10px] text-gray-400">
+                          <span className="font-bold text-brand-purple-light">Why this matters:</span> {q.why_this_matters}
                         </p>
                       </div>
                     )
                   })
                 ) : (
                   <div className="text-center py-10 text-xs text-gray-500 italic">
-                    No significant gaps identified. Excellent!
+                    No blind spot questions available.
                   </div>
                 )}
               </div>
@@ -308,67 +393,64 @@ export default function Results() {
           </div>
         </div>
 
-        {/* Detailed performance breakdown */}
+        {/* Section 3 — Gap Summary */}
         <section className="glass-card rounded-2xl p-6 md:p-8 flex flex-col gap-5 w-full">
-          <h2 className="text-lg font-bold text-white">Concept Understanding Metrics</h2>
+          <h2 className="text-lg font-bold text-white">Diagnosed Gaps</h2>
+          <p className="text-[11px] text-gray-500 -mt-2">
+            Knowledge gaps identified from your conversation, ranked by severity and priority.
+          </p>
           <div className="flex flex-col gap-4 mt-2">
-            {graphNodes.slice(0, 6).map((node) => {
-              const state = userModel.find(item => item.id === node.id)
-              const score = state ? state.confidence : 0
-              const percentage = Math.round(score * 100)
-              
-              let barColor = 'bg-gray-600'
-              let textColor = 'text-gray-500'
-              if (score >= 0.7) {
-                barColor = 'bg-brand-emerald'
-                textColor = 'text-brand-emerald'
-              } else if (score >= 0.4) {
-                barColor = 'bg-brand-purple'
-                textColor = 'text-brand-purple-light'
-              } else if (score > 0.0) {
-                barColor = 'bg-red-500 shadow-glow-error'
-                textColor = 'text-red-400'
-              }
+            {rankedGaps && rankedGaps.length > 0 ? (
+              rankedGaps.map((gap, index) => {
+                const priority = gap.priority
+                let colorClass = 'text-yellow-500 border-yellow-500/20 bg-yellow-500/10'
+                let barColor = 'bg-yellow-500'
+                if (priority > 7) {
+                  colorClass = 'text-red-500 border-red-500/20 bg-red-500/10 shadow-glow-error'
+                  barColor = 'bg-red-500'
+                } else if (priority >= 4) {
+                  colorClass = 'text-amber-500 border-amber-500/20 bg-amber-500/10'
+                  barColor = 'bg-amber-500'
+                }
 
-              return (
-                <div key={node.id} className="flex items-center gap-4 w-full">
-                  <div className="w-1/4 text-xs font-semibold text-gray-300 truncate">{node.label}</div>
-                  <div className="flex-grow h-2.5 bg-black/40 rounded-full overflow-hidden border border-brand-border/20">
-                    <div className={`h-full rounded-full transition-all duration-300 ${barColor}`} style={{ width: `${Math.max(percentage, 5)}%` }}></div>
+                return (
+                  <div key={gap.concept || index} className="flex items-center gap-4 w-full">
+                    <div className="w-1/4 text-xs font-semibold text-gray-300 truncate">{gap.label}</div>
+                    <div className="flex-grow h-2.5 bg-black/40 rounded-full overflow-hidden border border-brand-border/20">
+                      <div className={`h-full rounded-full transition-all duration-300 ${barColor}`} style={{ width: `${Math.max(priority * 10, 5)}%` }}></div>
+                    </div>
+                    <div className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${colorClass}`}>{priority}</div>
                   </div>
-                  <div className={`w-10 text-right text-[10px] font-bold tracking-wider ${textColor}`}>{percentage}%</div>
-                </div>
-              )
-            })}
+                )
+              })
+            ) : (
+              <div className="text-center py-10 text-xs text-gray-500 italic">
+                No significant gaps identified. Excellent!
+              </div>
+            )}
           </div>
         </section>
 
-        {/* Learning Roadmap timeline */}
+        {/* Section 2 — Learning Path */}
         <section className="glass-card rounded-2xl p-6 md:p-8 flex flex-col gap-5 w-full">
-          <h2 className="text-lg font-bold text-white">Your Path to Mastery</h2>
+          <h2 className="text-lg font-bold text-white">Your Learning Path</h2>
           <p className="text-[11px] text-gray-500 -mt-2">
             We've sorted your gaps topologically by their dependency hierarchy. Focus on these steps in order to unlock advanced topics.
           </p>
 
           <div className="relative flex flex-col gap-8 border-l border-brand-border/60 ml-4 pl-6 py-2">
-            {weakConcepts.length > 0 ? (
-              weakConcepts.slice(0, 3).map((concept, index) => {
-                const node = graphNodes.find(n => n.id === concept.id)
-                const label = node ? node.label : concept.id
-                const desc = node ? node.description : 'Prerequisite concept for your topic.'
-                
-                let stepBg = 'bg-brand-purple/20 border-brand-purple text-brand-purple-light'
-                if (concept.confidence < 0.4) {
-                  stepBg = 'bg-red-500/20 border-red-500 text-red-400 shadow-glow-error'
-                }
-
+            {learningPath && learningPath.length > 0 ? (
+              learningPath.map((item, index) => {
+                const unlocksText = Array.isArray(item.unlocks) ? item.unlocks.join(', ') : String(item.unlocks || '')
                 return (
-                  <div key={concept.id} className="relative w-full">
-                    <div className={`absolute -left-[37px] top-0 w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold z-10 bg-[#0F172A] ${stepBg}`}>
-                      {index + 1}
+                  <div key={item.concept || index} className="relative w-full">
+                    <div className="absolute -left-[37px] top-0 w-8 h-8 rounded-full border-2 border-brand-purple bg-[#0F172A] text-brand-purple-light flex items-center justify-center text-xs font-bold z-10 glow-primary">
+                      {item.order || (index + 1)}
                     </div>
-                    <h3 className="text-sm font-semibold text-white">{label}</h3>
-                    <p className="text-xs text-gray-400 mt-1 leading-relaxed">{desc}</p>
+                    <h3 className="text-sm font-bold text-white">{item.label}</h3>
+                    <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+                      Unlocks: <span className="text-gray-500 text-[11px]">{unlocksText || 'None'}</span>
+                    </p>
                   </div>
                 )
               })
