@@ -10,7 +10,24 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Apply middlewares
-app.use(cors());
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173'
+];
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.push(...process.env.FRONTEND_URL.split(',').map(url => url.trim()));
+}
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*') || !process.env.FRONTEND_URL) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
 app.use(express.json());
 
 // Mount routers

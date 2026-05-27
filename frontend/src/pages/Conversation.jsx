@@ -12,6 +12,7 @@ export default function Conversation() {
   const [loading, setLoading] = useState(false)
   const [userModel, setUserModel] = useState([])
   const messagesEndRef = useRef(null)
+  const bootstrapMessage = activeTopic ? `I want to evaluate my understanding of ${activeTopic}.` : ''
 
   // Redirect to home if no topic/session is initialized
   useEffect(() => {
@@ -48,7 +49,7 @@ export default function Conversation() {
     if (activeTopic && sessionId && chatHistory.length === 0 && !loading) {
       const bootstrapSession = async () => {
         setLoading(true)
-        const initialMessage = `I want to evaluate my understanding of ${activeTopic}.`
+        const initialMessage = bootstrapMessage
         
         // Add user's initial message locally
         const updatedHistory = [
@@ -82,7 +83,7 @@ export default function Conversation() {
       }
       bootstrapSession()
     }
-  }, [activeTopic, sessionId, chatHistory.length, loading, setChatHistory, API_URL])
+  }, [activeTopic, sessionId, chatHistory.length, loading, setChatHistory, API_URL, bootstrapMessage])
 
   const handleSend = async (e) => {
     e.preventDefault()
@@ -134,8 +135,12 @@ export default function Conversation() {
 
   if (!activeTopic) return null
 
-  // Calculate stats for Socratic Analysis & Map
-  const totalTurns = chatHistory.filter(m => m.role === 'user').length
+  // The auto-bootstrap user message starts the interview, but it is not an answer.
+  const userMessages = chatHistory.filter(m => m.role === 'user')
+  const totalTurns = Math.max(
+    0,
+    userMessages.length - (userMessages[0]?.content === bootstrapMessage ? 1 : 0)
+  )
   const maxTurns = 5
 
   const exploredConcepts = userModel.filter(c => c.confidence > 0 || c.evidence !== 'Initial state')

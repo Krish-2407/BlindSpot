@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const geminiModel = require('../config/gemini');
+const groq = require('../config/groq');
 const supabase = require('../config/supabase');
+const { recordAgentEvent, normalizeError } = require('../utils/agentTrace');
 
 function generateFallbackSocratic(topGaps) {
   const questionTemplates = [
@@ -46,6 +47,10 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'sessionId is required' });
     }
 
+    recordAgentEvent('agent4', 'request_received', {
+      sessionId
+    });
+
     // Step 2 - Fetch ranked gaps from Supabase
     const { data: resultsRows, error: resultsError } = await supabase
       .from('results')
@@ -69,6 +74,10 @@ router.post('/', async (req, res) => {
 
     // Log the top 5 gaps with console.log
     console.log('Top 5 Gaps fetched:', JSON.stringify(topGaps, null, 2));
+    recordAgentEvent('agent4', 'top_gaps_loaded', {
+      sessionId,
+      topGaps
+    });
 
     // Step 3 - Send to Gemini with this exact prompt
     const prompt = `You are a master Socratic teacher for a learning app.
@@ -115,9 +124,19 @@ No markdown. No backticks. No explanation. JSON only:
 
     let parsed;
     try {
-      const geminiResult = await geminiModel.generateContent(prompt);
-      const geminiResponse = await geminiResult.response;
-      let geminiText = geminiResponse.text().trim();
+      recordAgentEvent('agent4', 'groq_request', {
+        provider: 'groq',
+        model: 'llama-3.3-70b-versatile',
+        sessionId,
+        topGapsCount: topGaps.length
+      });
+
+      const chatCompletion = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        response_format: { type: "json_object" },
+        messages: [{ role: "user", content: prompt }]
+      });
+      let geminiText = chatCompletion.choices[0].message.content.trim();
 
       // Clean response by stripping markdown backticks
       if (geminiText.startsWith('```')) {
@@ -126,12 +145,22 @@ No markdown. No backticks. No explanation. JSON only:
 
       const tempParsed = JSON.parse(geminiText);
       if (!tempParsed.questions || !tempParsed.learning_path) {
-        throw new Error('Gemini response missing questions or learning_path field.');
+        throw new Error('Groq response missing questions or learning_path field.');
       }
       parsed = tempParsed;
+      recordAgentEvent('agent4', 'groq_response_parsed', {
+        sessionId,
+        rawResponse: geminiText,
+        parsed
+      });
     } catch (apiError) {
-      console.warn('Gemini API call failed. Falling back to dynamic mock Socratic generation. Error:', apiError.message || apiError);
+      console.warn('Groq API call failed. Falling back to dynamic mock Socratic generation. Error:', apiError.message || apiError);
       parsed = generateFallbackSocratic(topGaps);
+      recordAgentEvent('agent4', 'fallback_used', {
+        sessionId,
+        reason: normalizeError(apiError),
+        parsed
+      });
     }
 
     // Step 4 - Parse, save and return
@@ -187,6 +216,12 @@ No markdown. No backticks. No explanation. JSON only:
     }
 
     // Return JSON response
+    recordAgentEvent('agent4', 'results_saved', {
+      sessionId,
+      questions: parsed.questions,
+      learningPath: parsed.learning_path
+    });
+
     return res.status(200).json({
       questions: parsed.questions,
       learningPath: parsed.learning_path

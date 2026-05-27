@@ -1,0 +1,399 @@
+{
+  "agent1": {
+    "timestamp": "2026-05-27T14:25:30.645Z",
+    "agent": "agent1",
+    "stage": "session_saved",
+    "sessionId": "480422ce-0390-47f3-9165-fa33723f64df",
+    "topic": "indian history?",
+    "graphSource": "model_or_custom",
+    "nodesCount": 19,
+    "edgesCount": 17
+  },
+  "agent2": {
+    "timestamp": "2026-05-27T18:30:51.630Z",
+    "agent": "agent2",
+    "stage": "reply_ready",
+    "sessionId": "480422ce-0390-47f3-9165-fa33723f64df",
+    "topic": "indian history?",
+    "reply": "What's Mughal Empire?",
+    "confidenceUpdates": [
+      {
+        "id": "indian_subcontinent",
+        "confidence": 0.8,
+        "evidence": "Indian sub continent is my home"
+      },
+      {
+        "id": "ancient_civilizations",
+        "confidence": 0,
+        "evidence": "I dont know"
+      },
+      {
+        "id": "vedic_period",
+        "confidence": 0.4,
+        "evidence": "Old age period, time when vedas were written"
+      },
+      {
+        "id": "mahajanapadas",
+        "confidence": 0.6,
+        "evidence": "Places where kings and all the people of the empire used to meet to discuss on a problem"
+      },
+      {
+        "id": "islamic_conquests",
+        "confidence": 0,
+        "evidence": "I want to evaluate my understanding of indian history?"
+      }
+    ],
+    "userModel": [
+      {
+        "id": "indian_subcontinent",
+        "confidence": 0.8,
+        "evidence": "Indian sub continent is my home"
+      },
+      {
+        "id": "ancient_civilizations",
+        "confidence": 0,
+        "evidence": "I dont know"
+      },
+      {
+        "id": "indus_valley_civilization",
+        "evidence": "Initial state",
+        "confidence": 0
+      },
+      {
+        "id": "vedic_period",
+        "confidence": 0.4,
+        "evidence": "Old age period, time when vedas were written"
+      },
+      {
+        "id": "mahajanapadas",
+        "confidence": 0.6,
+        "evidence": "Places where kings and all the people of the empire used to meet to discuss on a problem"
+      },
+      {
+        "id": "mauryan_empire",
+        "evidence": "Initial state",
+        "confidence": 0
+      },
+      {
+        "id": "gupta_empire",
+        "evidence": "Initial state",
+        "confidence": 0
+      },
+      {
+        "id": "islamic_conquests",
+        "confidence": 0,
+        "evidence": "I want to evaluate my understanding of indian history?"
+      },
+      {
+        "id": "mughal_empire",
+        "evidence": "Initial state",
+        "confidence": 0
+      },
+      {
+        "id": "british_colonization",
+        "evidence": "Initial state",
+        "confidence": 0
+      },
+      {
+        "id": "indian_independence_movement",
+        "evidence": "Initial state",
+        "confidence": 0
+      },
+      {
+        "id": "indian_renaissance",
+        "evidence": "Initial state",
+        "confidence": 0
+      },
+      {
+        "id": "partition_of_india",
+        "evidence": "Initial state",
+        "confidence": 0
+      },
+      {
+        "id": "indian_nationalism",
+        "evidence": "Initial state",
+        "confidence": 0
+      },
+      {
+        "id": "regional_kingdoms",
+        "evidence": "Initial state",
+        "confidence": 0
+      },
+      {
+        "id": "cultural_exchange",
+        "evidence": "Initial state",
+        "confidence": 0
+      },
+      {
+        "id": "social_reforms",
+        "evidence": "Initial state",
+        "confidence": 0
+      },
+      {
+        "id": "economic_history",
+        "evidence": "Initial state",
+        "confidence": 0
+      },
+      {
+        "id": "indian_architecture",
+        "evidence": "Initial state",
+        "confidence": 0
+      }
+    ]
+  },
+  "agent3": {
+    "timestamp": "2026-05-27T14:17:22.799Z",
+    "agent": "agent3",
+    "stage": "results_saved",
+    "sessionId": "04e02093-962d-453c-af68-f7149678bf1d",
+    "rankedGaps": [
+      {
+        "concept": "variables",
+        "label": "Variables & Data Types",
+        "priority": 10,
+        "why": "Mastering variables is essential for understanding the foundation of programming in Java.",
+        "downstream": [
+          "operators",
+          "control_structures",
+          "methods",
+          "classes",
+          "exceptions",
+          "collections"
+        ]
+      },
+      {
+        "concept": "methods",
+        "label": "Methods",
+        "priority": 9,
+        "why": "Understanding methods is crucial for organizing code into reusable blocks, a fundamental aspect of programming.",
+        "downstream": [
+          "classes",
+          "collections",
+          "io_stream",
+          "serialization",
+          "reflection",
+          "annotations",
+          "jdbc"
+        ]
+      },
+      {
+        "concept": "operators",
+        "label": "Operators",
+        "priority": 8,
+        "why": "Operators are vital for performing arithmetic, comparison, and logical operations, basic functions in any program.",
+        "downstream": []
+      },
+      {
+        "concept": "control_structures",
+        "label": "Control Structures",
+        "priority": 8,
+        "why": "Control structures like if-else, switch, and loops are fundamental for flow control in programming.",
+        "downstream": [
+          "methods"
+        ]
+      },
+      {
+        "concept": "classes",
+        "label": "Classes & Objects",
+        "priority": 7,
+        "why": "Classes and objects are essential for defining custom data types and are the building blocks of object-oriented programming.",
+        "downstream": [
+          "inheritance",
+          "polymorphism",
+          "encapsulation",
+          "threads"
+        ]
+      },
+      {
+        "concept": "inheritance",
+        "label": "Inheritance",
+        "priority": 6,
+        "why": "Inheritance allows for the creation of hierarchies of related classes, a key concept in object-oriented programming.",
+        "downstream": [
+          "polymorphism"
+        ]
+      },
+      {
+        "concept": "polymorphism",
+        "label": "Polymorphism",
+        "priority": 6,
+        "why": "Understanding polymorphism is important for using methods with different implementations, enhancing code flexibility.",
+        "downstream": [
+          "encapsulation"
+        ]
+      },
+      {
+        "concept": "exceptions",
+        "label": "Exceptions",
+        "priority": 5,
+        "why": "Handling exceptions is crucial for managing runtime errors and ensuring robust program execution.",
+        "downstream": []
+      },
+      {
+        "concept": "collections",
+        "label": "Collections Framework",
+        "priority": 5,
+        "why": "The collections framework provides efficient data structures for storage and retrieval, a common requirement in programming.",
+        "downstream": [
+          "io_stream"
+        ]
+      },
+      {
+        "concept": "encapsulation",
+        "label": "Encapsulation",
+        "priority": 5,
+        "why": "Encapsulation is vital for hiding implementation details and exposing interfaces, a principle of good object-oriented design.",
+        "downstream": []
+      },
+      {
+        "concept": "threads",
+        "label": "Multithreading",
+        "priority": 4,
+        "why": "Multithreading allows for concurrent execution, improving program performance and responsiveness.",
+        "downstream": [
+          "jdbc"
+        ]
+      },
+      {
+        "concept": "io_stream",
+        "label": "Input/Output Streams",
+        "priority": 4,
+        "why": "Understanding input/output streams is necessary for reading and writing data to files and networks.",
+        "downstream": [
+          "serialization"
+        ]
+      },
+      {
+        "concept": "serialization",
+        "label": "Serialization",
+        "priority": 3,
+        "why": "Serialization is important for converting objects to and from byte streams, useful in data exchange and persistence.",
+        "downstream": [
+          "reflection"
+        ]
+      },
+      {
+        "concept": "reflection",
+        "label": "Reflection",
+        "priority": 3,
+        "why": "Reflection allows for inspecting and modifying classes at runtime, a powerful feature for dynamic programming.",
+        "downstream": [
+          "annotations"
+        ]
+      },
+      {
+        "concept": "annotations",
+        "label": "Annotations",
+        "priority": 2,
+        "why": "Annotations provide metadata for compiler instructions and runtime checks, supporting aspects like dependency injection and validation.",
+        "downstream": []
+      },
+      {
+        "concept": "jdbc",
+        "label": "JDBC",
+        "priority": 2,
+        "why": "JDBC is essential for interacting with databases using SQL and the JDBC API, a common requirement in data-driven applications.",
+        "downstream": [
+          "generics"
+        ]
+      },
+      {
+        "concept": "generics",
+        "label": "Generics",
+        "priority": 1,
+        "why": "Generics enable the creation of reusable and type-safe code, improving code quality and reducing bugs.",
+        "downstream": []
+      }
+    ]
+  },
+  "agent4": {
+    "timestamp": "2026-05-27T14:17:24.949Z",
+    "agent": "agent4",
+    "stage": "results_saved",
+    "sessionId": "04e02093-962d-453c-af68-f7149678bf1d",
+    "questions": [
+      {
+        "order": 1,
+        "concept": "variables",
+        "label": "Variables & Data Types",
+        "question": "How do programs store info?",
+        "why_this_matters": "Understanding variables is essential for programming in Java."
+      },
+      {
+        "order": 2,
+        "concept": "methods",
+        "label": "Methods",
+        "question": "How do we reuse code?",
+        "why_this_matters": "Methods are crucial for organizing code."
+      },
+      {
+        "order": 3,
+        "concept": "operators",
+        "label": "Operators",
+        "question": "How do we compare values?",
+        "why_this_matters": "Operators are vital for basic program functions."
+      },
+      {
+        "order": 4,
+        "concept": "control_structures",
+        "label": "Control Structures",
+        "question": "How do programs make decisions?",
+        "why_this_matters": "Control structures are fundamental for flow control."
+      },
+      {
+        "order": 5,
+        "concept": "classes",
+        "label": "Classes & Objects",
+        "question": "How do we create custom types?",
+        "why_this_matters": "Classes and objects are essential for object-oriented programming."
+      }
+    ],
+    "learningPath": [
+      {
+        "order": 1,
+        "concept": "variables",
+        "label": "Variables & Data Types",
+        "unlocks": [
+          "operators",
+          "control_structures",
+          "methods"
+        ]
+      },
+      {
+        "order": 2,
+        "concept": "operators",
+        "label": "Operators",
+        "unlocks": [
+          "control_structures"
+        ]
+      },
+      {
+        "order": 3,
+        "concept": "control_structures",
+        "label": "Control Structures",
+        "unlocks": [
+          "methods"
+        ]
+      },
+      {
+        "order": 4,
+        "concept": "methods",
+        "label": "Methods",
+        "unlocks": [
+          "classes"
+        ]
+      },
+      {
+        "order": 5,
+        "concept": "classes",
+        "label": "Classes & Objects",
+        "unlocks": [
+          "inheritance",
+          "polymorphism",
+          "encapsulation",
+          "threads"
+        ]
+      }
+    ]
+  }
+}

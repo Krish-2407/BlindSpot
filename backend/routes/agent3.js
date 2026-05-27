@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const geminiModel = require('../config/gemini');
+const groq = require('../config/groq');
 const supabase = require('../config/supabase');
+const { recordAgentEvent, normalizeError } = require('../utils/agentTrace');
 
 function generateFallbackRankedGaps(gaps, expertGraph) {
   // Sort gaps by unlock_value descending, then confidence ascending
@@ -42,6 +43,10 @@ router.post('/', async (req, res) => {
     if (!sessionId) {
       return res.status(400).json({ error: 'sessionId is required' });
     }
+
+    recordAgentEvent('agent3', 'request_received', {
+      sessionId
+    });
 
     // Step 2 - Fetch data from Supabase
     const { data: sessionData, error: sessionError } = await supabase
@@ -107,6 +112,12 @@ router.post('/', async (req, res) => {
 
     // Log the gaps array with console.log
     console.log('Built gaps list:', JSON.stringify(gaps, null, 2));
+    recordAgentEvent('agent3', 'gaps_built', {
+      sessionId,
+      gaps,
+      expertGraphNodesCount: nodes.length,
+      userModel
+    });
 
     // Step 4 - Send gaps to Gemini for ranking
     const prompt = `You are a knowledge gap analyst for a learning app.
@@ -138,9 +149,19 @@ No markdown. No backticks. No explanation. JSON only:
 
     let rankedGaps;
     try {
-      const geminiResult = await geminiModel.generateContent(prompt);
-      const geminiResponse = await geminiResult.response;
-      let geminiText = geminiResponse.text().trim();
+      recordAgentEvent('agent3', 'groq_request', {
+        provider: 'groq',
+        model: 'llama-3.3-70b-versatile',
+        sessionId,
+        gapsCount: gaps.length
+      });
+
+      const chatCompletion = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        response_format: { type: "json_object" },
+        messages: [{ role: "user", content: prompt }]
+      });
+      let geminiText = chatCompletion.choices[0].message.content.trim();
 
       // Clean response by stripping markdown backticks
       if (geminiText.startsWith('```')) {
@@ -149,12 +170,22 @@ No markdown. No backticks. No explanation. JSON only:
 
       const parsedResult = JSON.parse(geminiText);
       if (!parsedResult.ranked_gaps || !Array.isArray(parsedResult.ranked_gaps)) {
-        throw new Error('Gemini response missing ranked_gaps field or it is not an array.');
+        throw new Error('Groq response missing ranked_gaps field or it is not an array.');
       }
       rankedGaps = parsedResult.ranked_gaps;
+      recordAgentEvent('agent3', 'groq_response_parsed', {
+        sessionId,
+        rawResponse: geminiText,
+        rankedGaps
+      });
     } catch (apiError) {
-      console.warn('Gemini API call failed. Falling back to dynamic JS gap ranking. Error:', apiError.message || apiError);
+      console.warn('Groq API call failed. Falling back to dynamic JS gap ranking. Error:', apiError.message || apiError);
       rankedGaps = generateFallbackRankedGaps(gaps, expertGraph);
+      recordAgentEvent('agent3', 'fallback_used', {
+        sessionId,
+        reason: normalizeError(apiError),
+        rankedGaps
+      });
     }
 
     // Step 5 - Parse and save
@@ -178,6 +209,11 @@ No markdown. No backticks. No explanation. JSON only:
     }
 
     // Return JSON response
+    recordAgentEvent('agent3', 'results_saved', {
+      sessionId,
+      rankedGaps
+    });
+
     return res.status(200).json({
       rankedGaps: rankedGaps
     });

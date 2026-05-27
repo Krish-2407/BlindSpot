@@ -12,9 +12,11 @@ Stack: React + Vite (frontend) · Node + Express (backend) · Gemini API (AI) ·
 ---
 
 ## Current Project State
-**Phase:** Phase 4 — Polish and Deploy (In Progress - Tasks 1, 2, 3 complete)
-**Last updated:** Tuesday (Day 4 — Implemented comprehensive loading states, stagger card animations, manual retry error handling, and critical API/Storage bug fixes across all frontend screens)
-**Next session goal:** Replace placeholder gap map with a basic D3.js node graph, configure CORS on Express, and deploy staging build.
+**Latest session note:** Wednesday Day 4/5 - Added Groq agent tracing and confirmed repeated Java questions were caused by an old Node process serving fallback code on port 3000. A fresh backend process produced a real Java roadmap through Groq and Agent 2 asked "What's a variable in Java?"
+**Latest bugfix:** Thursday Day 5 - Fixed Conversation screen turn counting so the automatic bootstrap message is not counted as a user answer; users can now answer all 5 AI questions before the results button appears.
+**Phase:** Phase 4 — Polish and Deploy (In Progress - CORS configuration and Railway preparation complete)
+**Last updated:** Tuesday (Day 4 — Configured package.json start script, dynamic CORS origins, and railway.toml configuration for backend hosting deployment)
+**Next session goal:** Replace placeholder gap map with a basic D3.js node graph, deploy backend to Railway, and deploy frontend to Vercel.
 
 ---
 
@@ -44,6 +46,10 @@ Stack: React + Vite (frontend) · Node + Express (backend) · Gemini API (AI) ·
 - [x] Implemented robust frontend loading states, spinner states, and stagger animations across all three screens
 - [x] Standardized API failure try-catch errors and added interactive retry handlers to Home, Conversation, and Results pages
 - [x] Fixed critical bugs (clearing old sessions in Home, sending full message array in Socratic Chat, double results fetch)
+- [x] Migrated backend agent routes to Groq SDK calls using `GROQ_API_KEY`
+- [x] Added live backend debug traces in `backend/debug/agent-latest.json` and `backend/debug/agent-events.jsonl`
+- [x] Verified fresh backend process generates a Java expert graph through Groq and Agent 2 asks a Java-specific question
+- [x] Fixed Conversation screen answer counter so the fifth AI question remains answerable before showing results
 
 ---
 
@@ -125,10 +131,21 @@ blindspot/               ← root folder (GitHub repo)
 
 ---
 
+## Live Debug Files
+```
+backend/debug/agent-latest.json   # latest output/state for Agents 1-4
+backend/debug/agent-events.jsonl  # append-only event stream with raw Groq outputs and fallback reasons
+backend/utils/agentTrace.js       # trace writer used by agent routes
+backend/config/groq.js            # Groq SDK client
+```
+
+---
+
 ## Environment Variables Needed
 ```
 # backend/.env
 GEMINI_API_KEY=
+GROQ_API_KEY=
 SUPABASE_URL=
 SUPABASE_ANON_KEY=
 PORT=3000
@@ -141,22 +158,24 @@ VITE_API_URL=http://localhost:3000
 
 ## What To Build Next
 Phase 4 tasks — in order:
-1. Replace Screen 3 placeholder gap map with a basic D3.js node graph
-2. Configure CORS on Express to allow frontend domains
-3. Deploy frontend to Vercel and backend to Railway
+1. Tighten Agent 2 prompt so follow-up questions adapt more deeply to the user's answer and expert graph
+2. Replace Screen 3 placeholder gap map with a basic D3.js node graph
+3. Deploy backend to Railway and configure service settings
+4. Deploy frontend to Vercel and wire up VITE_API_URL environment variable
 
 ---
 
 ## Known Issues / Blockers
-None yet.
+- If Java/other topics show fallback questions like "Could you explain what X Fundamentals...", confirm the browser is hitting a fresh backend process. A stale Node process on port 3000 previously served old fallback code.
+- The old `gemini.js` config still exists but current agent routes use Groq. Remove or archive it once the migration is fully settled.
 
 ---
 
 ## Decisions Made So Far
-- Using Google Gemini API (free tier, no credit card needed) instead of OpenAI Codex
+- Backend agent routes currently use Groq SDK with `llama-3.3-70b-versatile`
 - Using Supabase free tier for database
 - Using Railway for backend hosting, Vercel for frontend hosting
-- All 4 AI agents use the same Gemini API key — different prompts, same service
+- All 4 AI agents use the same Groq API key — different prompts, same service
 
 ---
 

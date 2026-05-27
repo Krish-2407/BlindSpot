@@ -107,11 +107,11 @@ results (
 - [ ] Make UI responsive — test on mobile screen size
 - [ ] Polish gap map — colour nodes green/amber/red by confidence score
 - [ ] Add hover tooltips on gap map nodes
-- [ ] Configure CORS on Express to allow Vercel domain
+- [x] Configure CORS on Express to allow Vercel/production domain dynamically
 - [ ] Deploy frontend to Vercel
       - Connect GitHub repo
       - Set `VITE_API_URL` to Railway backend URL
-- [ ] Deploy backend to Railway
+- [/] Deploy backend to Railway (Prepared for deployment: package.json script and railway.toml added)
       - Connect GitHub repo
       - Set all `.env` variables in Railway dashboard
 - [ ] Smoke test full flow on live URLs

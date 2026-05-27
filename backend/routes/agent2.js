@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../config/supabase');
-const geminiModel = require('../config/gemini');
+const groq = require('../config/groq');
+const { recordAgentEvent, normalizeError } = require('../utils/agentTrace');
 
 function generateFallbackReply(userMessage, conceptsList, turnNumber) {
   const responses = [
@@ -69,6 +70,13 @@ router.post('/', async (req, res) => {
       label: node.label,
       description: node.description
     }));
+
+    recordAgentEvent('agent2', 'request_received', {
+      sessionId,
+      topic: sessionData.topic,
+      userMessage: userMessage.trim(),
+      expertGraphNodesCount: conceptsList.length
+    });
 
     // 3. Fetch existing conversation (use limit(1) to safely handle any duplicate rows)
     const { data: convRows, error: convError } = await supabase
@@ -148,12 +156,25 @@ ${historyText}`;
     let reply;
     let confidenceUpdates = [];
     try {
-      // 6. Call Gemini
-      const result = await geminiModel.generateContent(prompt);
+      // 6. Call Groq
+      recordAgentEvent('agent2', 'groq_request', {
+        provider: 'groq',
+        model: 'llama-3.3-70b-versatile',
+        sessionId,
+        topic: sessionData.topic,
+        historyLength: history.length,
+        concepts: conceptsList
+      });
+
+      const chatCompletion = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        response_format: { type: "json_object" },
+        messages: [{ role: "user", content: prompt }]
+      });
       
       let parsed;
       try {
-        const rawText = result.response.text();
+        const rawText = chatCompletion.choices[0].message.content.trim();
         console.log('Agent 2 raw response:', rawText);
         
         // Strip markdown backticks if present
@@ -163,9 +184,21 @@ ${historyText}`;
           .trim();
           
         parsed = JSON.parse(cleaned);
+        recordAgentEvent('agent2', 'groq_response_parsed', {
+          sessionId,
+          topic: sessionData.topic,
+          rawResponse: rawText,
+          parsed
+        });
       } catch (parseError) {
         console.error('JSON parse failed:', parseError);
-        console.error('Raw text was:', result.response.text());
+        console.error('Raw text was:', chatCompletion.choices[0].message.content);
+        recordAgentEvent('agent2', 'parse_fallback_used', {
+          sessionId,
+          topic: sessionData.topic,
+          reason: normalizeError(parseError),
+          rawResponse: chatCompletion.choices[0].message.content
+        });
         
         // Return a safe fallback so conversation doesn't break
         parsed = {
@@ -177,10 +210,17 @@ ${historyText}`;
       reply = parsed.reply || "Could you explain that in more detail?";
       confidenceUpdates = parsed.confidence_updates || [];
     } catch (apiError) {
-      console.warn('Gemini API call failed or rate-limited in Socratic chat. Falling back to mock reply. Error:', apiError.message);
+      console.warn('Groq API call failed or rate-limited in Socratic chat. Falling back to mock reply. Error:', apiError.message);
       const fallbackResult = generateFallbackReply(userMessage, conceptsList, history.length);
       reply = fallbackResult.reply;
       confidenceUpdates = fallbackResult.confidence_updates;
+      recordAgentEvent('agent2', 'fallback_used', {
+        sessionId,
+        topic: sessionData.topic,
+        reason: normalizeError(apiError),
+        fallbackReply: reply,
+        confidenceUpdates
+      });
     }
 
     // 8. Merge confidence updates into userModel
@@ -208,6 +248,14 @@ ${historyText}`;
 
     // 9. Append tutor's reply to history
     history.push({ role: 'assistant', content: reply });
+
+    recordAgentEvent('agent2', 'reply_ready', {
+      sessionId,
+      topic: sessionData.topic,
+      reply,
+      confidenceUpdates,
+      userModel
+    });
 
     // 10. Upsert conversation record
     let dbResult;
