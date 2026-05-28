@@ -27,3 +27,13 @@ build/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Project Docs & AI Configs
+agents.md
+context.md
+tasks.md
+backend/DEPLOY.md
+
+# Logs & Debug
+backend/server_run.log
+backend/debug/
