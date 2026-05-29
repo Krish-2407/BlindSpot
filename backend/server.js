@@ -44,7 +44,7 @@ app.get('/health', (req, res) => {
 
 // Run server listen within try/catch block
 try {
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server successfully started on port ${PORT}`);
   });
 } catch (error) {
