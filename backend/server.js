@@ -51,3 +51,16 @@ try {
   console.error('Error occurred while starting the Express server:', error);
   process.exit(1);
 }
+
+// Keep-alive ping to prevent Render free tier spindown
+const RENDER_URL = process.env.RENDER_EXTERNAL_URL
+if (RENDER_URL) {
+  setInterval(async () => {
+    try {
+      await fetch(`${RENDER_URL}/health`)
+      console.log('Keep-alive ping sent')
+    } catch (error) {
+      console.log('Keep-alive ping failed:', error.message)
+    }
+  }, 14 * 60 * 1000) // ping every 14 minutes
+}
