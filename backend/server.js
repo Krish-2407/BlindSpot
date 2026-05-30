@@ -76,6 +76,10 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date() });
 });
 
+// Centralized error handling middleware
+const errorHandler = require('./middleware/errorHandler');
+app.use(errorHandler);
+
 // 404 catch-all for unknown routes
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });

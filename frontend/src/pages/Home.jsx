@@ -2,96 +2,11 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFlow } from '../context/FlowContext'
 import axios from 'axios'
+import { transliterateDevanagari } from '../utils/transliterate'
+import { DEMO_PROFILES } from '../data/demoProfiles'
+import useSpeechRecognition from '../hooks/useSpeechRecognition'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-
-function transliterateDevanagari(text) {
-  if (!text) return '';
-  
-  const map = {
-    // Vowels (Independent)
-    'अ': 'a', 'आ': 'aa', 'इ': 'i', 'ई': 'ee', 'उ': 'u', 'ऊ': 'oo', 'ऋ': 'ri',
-    'ए': 'e', 'ऐ': 'ai', 'ओ': 'o', 'औ': 'au', 'अं': 'an', 'अः': 'ah',
-    
-    // Matras (Dependent Vowels)
-    'ा': 'a', 'ि': 'i', 'ी': 'ee', 'ु': 'u', 'ू': 'oo', 'ृ': 'ri',
-    'े': 'e', 'ै': 'ai', 'ो': 'o', 'ौ': 'au', 'ं': 'n', 'ः': 'h', 'ँ': 'n',
-    
-    // Consonants
-    'क': 'ka', 'ख': 'kha', 'ग': 'ga', 'घ': 'gha', 'ङ': 'nga',
-    'च': 'cha', 'छ': 'chha', 'ज': 'ja', 'झ': 'jha', 'ञ': 'nya',
-    'ट': 'ta', 'ठ': 'tha', 'ड': 'da', 'ढ': 'dha', 'ण': 'na',
-    'त': 'ta', 'थ': 'tha', 'द': 'da', 'ध': 'dha', 'न': 'na',
-    'प': 'pa', 'फ': 'pha', 'ब': 'ba', 'भ': 'bha', 'म': 'ma',
-    'य': 'ya', 'र': 'ra', 'ल': 'la', 'व': 'va', 'श': 'sha', 'ष': 'sha', 'स': 'sa', 'ह': 'ha',
-    'क्ष': 'ksha', 'त्र': 'tra', 'ज्ञ': 'gya', 'ड़': 'd', 'ढ़': 'dh', 'ज़': 'z', 'फ़': 'f', 'ख़': 'kh', 'ग़': 'g',
-    
-    // Numbers
-    '०': '0', '१': '1', '२': '2', '३': '3', '४': '4', '५': '5', '६': '6', '७': '7', '८': '8', '९': '9'
-  };
-
-  let result = '';
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    const nextChar = text[i + 1] || '';
-    
-    let mapped = map[char];
-    
-    if (mapped) {
-      const isConsonant = 'कखगघङचछजझञटठडढणतथदधनपफबभमयरलवशषसहक्षत्रज्ञड़ढ़ज़फ़ख़ग़'.includes(char);
-      const isNextMatra = 'ािीुूृेैोौंःँ्'.includes(nextChar);
-      const isNextSeparator = !nextChar || ' \t\n\r.,!?-()[]{}""\'\''.includes(nextChar);
-      
-      if (isConsonant) {
-        if (isNextMatra) {
-          if (nextChar === '्') {
-            result += mapped.slice(0, -1);
-            i++; 
-            continue;
-          } else {
-            result += mapped.slice(0, -1) + map[nextChar];
-            i++; 
-            continue;
-          }
-        }
-        if (isNextSeparator) {
-          result += mapped.slice(0, -1);
-          continue;
-        }
-      }
-      result += mapped;
-    } else {
-      result += char;
-    }
-  }
-  
-  return result
-    .replace(/aa+/g, 'a')
-    .replace(/ee+/g, 'ee')
-    .replace(/oo+/g, 'oo')
-    .replace(/ae/g, 'e');
-}
-
-const DEMO_PROFILES = [
-  {
-    name: 'React Hooks Basics',
-    topic: 'React Hooks',
-    explanation: 'I understand that useState allows us to add state to functional components, and useEffect is for side effects. But I always get confused about dependency arrays, stale closures inside callbacks, and why we shouldn\'t call hooks conditionally.',
-    colorClass: 'border-cyan-500/30 text-cyan-400 hover:border-cyan-400 hover:shadow-[0_0_12px_rgba(6,182,212,0.35)] hover:bg-cyan-950/20'
-  },
-  {
-    name: 'Quantum Mechanics Intro',
-    topic: 'Quantum Mechanics',
-    explanation: 'I understand wave-particle duality and the Schrodinger equation, but quantum tunneling, superposition vs mixed states, and Bell\'s inequality are things I struggle to explain or visualize.',
-    colorClass: 'border-purple-500/30 text-purple-400 hover:border-purple-400 hover:shadow-[0_0_12px_rgba(168,85,247,0.35)] hover:bg-purple-950/20'
-  },
-  {
-    name: 'Git Internals',
-    topic: 'Git Internals',
-    explanation: 'I know git add and git commit, and how branches are pointers. But I do not understand how git represents tree and blob objects internally, how commits reference them, and how git resolves conflicts during a merge on a low level.',
-    colorClass: 'border-orange-500/30 text-orange-400 hover:border-orange-400 hover:shadow-[0_0_12px_rgba(249,115,22,0.35)] hover:bg-orange-950/20'
-  }
-]
 
 export default function Home() {
   const { setActiveTopic, setSessionId, setMasterGraph, setChatHistory, setActiveScreen, resumeSession } = useFlow()
@@ -142,88 +57,27 @@ export default function Home() {
     }
   };
 
-  const [isListening, setIsListening] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(false);
-  const [recognition, setRecognition] = useState(null);
-  const [voiceLang, setVoiceLang] = useState('en-US');
-  const [interimText, setInterimText] = useState('');
+  const {
+    isListening,
+    speechSupported,
+    recognition,
+    voiceLang,
+    setVoiceLang,
+    interimText,
+    setInterimText,
+    toggleListening
+  } = useSpeechRecognition({
+    onTranscript: (finalTranscript) => {
+      setExplanation((prev) => {
+        const separator = prev.trim() === '' ? '' : ' ';
+        const updated = prev + separator + finalTranscript;
+        return updated.slice(0, 10000); // Cap at max limit
+      });
+    }
+  });
 
   // Initialize Speech Recognition on Mount / Lang change
-  useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      setSpeechSupported(true);
-      const rec = new SpeechRecognition();
-      rec.continuous = true;
-      rec.interimResults = true;
-      rec.lang = voiceLang;
 
-      rec.onresult = (event) => {
-        let finalTranscript = '';
-        let interimTranscript = '';
-
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          let text = event.results[i][0].transcript;
-          if (voiceLang === 'hi-IN') {
-            text = transliterateDevanagari(text);
-          }
-          
-          if (event.results[i].isFinal) {
-            finalTranscript += text;
-          } else {
-            interimTranscript += text;
-          }
-        }
-
-        if (finalTranscript) {
-          setExplanation((prev) => {
-            const separator = prev.trim() === '' ? '' : ' ';
-            const updated = prev + separator + finalTranscript;
-            return updated.slice(0, 10000); // Cap at max limit
-          });
-          setInterimText('');
-        } else {
-          setInterimText(interimTranscript);
-        }
-      };
-
-      rec.onerror = (event) => {
-        console.error('Speech recognition error:', event.error);
-        setIsListening(false);
-        setInterimText('');
-      };
-
-      rec.onend = () => {
-        setIsListening(false);
-        setInterimText('');
-      };
-
-      setRecognition(rec);
-
-      return () => {
-        try {
-          rec.stop();
-        } catch {
-          // ignore if already stopped or not active
-        }
-      };
-    }
-  }, [voiceLang]);
-
-  const toggleListening = () => {
-    if (!recognition) return;
-    if (isListening) {
-      recognition.stop();
-      setIsListening(false);
-    } else {
-      try {
-        recognition.start();
-        setIsListening(true);
-      } catch (e) {
-        console.error('Failed to start speech recognition:', e);
-      }
-    }
-  };
 
   const handleSummarize = async () => {
     if (explanation.length <= 2000) return;

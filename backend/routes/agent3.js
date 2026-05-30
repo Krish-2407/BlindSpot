@@ -3,39 +3,9 @@ const router = express.Router();
 const groq = require('../config/groq');
 const supabase = require('../config/supabase');
 const { recordAgentEvent, normalizeError } = require('../utils/agentTrace');
+const { generateFallbackRankedGaps } = require('../utils/fallbacks');
 
-function generateFallbackRankedGaps(gaps, expertGraph) {
-  // Sort gaps by unlock_value descending, then confidence ascending
-  const sortedGaps = [...gaps].sort((a, b) => {
-    if (b.unlock_value !== a.unlock_value) {
-      return b.unlock_value - a.unlock_value;
-    }
-    const confA = a.confidence === null ? 0 : a.confidence;
-    const confB = b.confidence === null ? 0 : b.confidence;
-    return confA - confB;
-  });
-
-  return sortedGaps.map((gap, index) => {
-    const confVal = gap.confidence === null ? 0 : gap.confidence;
-    // Calculate priority between 1 and 10
-    const priority = Math.min(10, Math.max(1, parseFloat((8.0 + (gap.unlock_value * 0.5) - (confVal * 3) - (index * 0.5)).toFixed(1))));
-    
-    // Find downstream concept ids
-    const downstream = (expertGraph.edges || [])
-      .filter(edge => edge.from === gap.id)
-      .map(edge => edge.to);
-
-    return {
-      concept: gap.id,
-      label: gap.label,
-      priority: priority,
-      why: `This concept is essential to unlock ${downstream.length > 0 ? downstream.join(', ') : 'more advanced topics'} and requires further practice.`,
-      downstream: downstream
-    };
-  });
-}
-
-router.post('/', async (req, res) => {
+router.post('/', async (req, res, next) => {
   try {
     const { sessionId } = req.body;
 
@@ -120,14 +90,37 @@ router.post('/', async (req, res) => {
     });
 
     // Step 4 - Send gaps to Groq for ranking
+    const gapIds = new Set(gaps.map(g => g.id));
+    const cleanNodes = (expertGraph.nodes || []).map(n => ({
+      id: n.id,
+      label: n.label,
+      unlock_score: n.unlock_score
+    }));
+    const filteredEdges = (expertGraph.edges || []).filter(edge => gapIds.has(edge.from) || gapIds.has(edge.to));
+    const optimizedGraph = {
+      nodes: cleanNodes,
+      edges: filteredEdges
+    };
+    const cleanGaps = gaps.map(g => ({
+      id: g.id,
+      label: g.label,
+      confidence: g.confidence,
+      unlock_value: g.unlock_value
+    }));
+
+    const openingExplanation = expertGraph.opening_explanation || '';
+
     const prompt = `You are a knowledge gap analyst for a learning app.
 A student has just completed a diagnostic conversation.
 Based on their performance, here are their knowledge gaps:
 
-Gaps: ${JSON.stringify(gaps)}
-Full expert graph for context: ${JSON.stringify(expertGraph)}
+Gaps: ${JSON.stringify(cleanGaps)}
+Optimized expert graph for context: ${JSON.stringify(optimizedGraph)}
+User's initial self-assessment explanation: "${openingExplanation}"
 
-Your job: Rank these gaps from most critical to least critical.
+Your job:
+1. Evaluate the user's initial self-assessment explanation and assess their implied confidence level (Pre-seed confidence) on a scale from 0.0 (no confidence/beginner) to 1.0 (absolute confidence/expert).
+2. Rank these gaps from most critical to least critical.
 Consider:
 - How many downstream concepts this gap blocks
 - How fundamental this concept is to the topic
@@ -138,6 +131,7 @@ CRITICAL LANGUAGE CONSTRAINT: All output strings (such as the "why" reason expla
 Respond ONLY in this exact JSON format. 
 No markdown. No backticks. No explanation. JSON only:
 {
+  "expected_confidence": number between 0.0 and 1.0,
   "ranked_gaps": [
     {
       "concept": string,
@@ -150,6 +144,8 @@ No markdown. No backticks. No explanation. JSON only:
 }`;
 
     let rankedGaps;
+    let expectedConfidence = 0.5;
+
     try {
       recordAgentEvent('agent3', 'groq_request', {
         provider: 'groq',
@@ -175,6 +171,9 @@ No markdown. No backticks. No explanation. JSON only:
         throw new Error('Groq response missing ranked_gaps field or it is not an array.');
       }
       rankedGaps = parsedResult.ranked_gaps;
+      if (parsedResult.expected_confidence !== undefined) {
+        expectedConfidence = parseFloat(parsedResult.expected_confidence);
+      }
       recordAgentEvent('agent3', 'groq_response_parsed', {
         sessionId,
         rawResponse: rawText,
@@ -190,42 +189,82 @@ No markdown. No backticks. No explanation. JSON only:
       });
     }
 
-    // Step 5 - Parse and save
-    // Insert a new row into Supabase results table
-    const { data: insertData, error: insertError } = await supabase
-      .from('results')
-      .insert([
-        {
-          session_id: sessionId,
-          ranked_gaps: rankedGaps
-        }
-      ])
-      .select();
+    // Step 5 - Compute Scores and Save
+    const { computeBlindSpotScore } = require('../utils/blindSpotScore');
+    const totalConcepts = (expertGraph.nodes || []).length;
+    const blindSpotScore = computeBlindSpotScore(rankedGaps, totalConcepts);
 
-    if (insertError) {
-      console.error('Supabase insert results error:', insertError);
+    const validModel = userModel.filter(item => item && typeof item.confidence === 'number');
+    const finalActualConfidence = validModel.length > 0
+      ? validModel.reduce((sum, item) => sum + item.confidence, 0) / validModel.length
+      : 0.0;
+
+    const diff = expectedConfidence - finalActualConfidence;
+    let calibrationClass = 'Well-calibrated';
+    if (diff > 0.3) {
+      calibrationClass = 'Overconfident (Dunning-Kruger)';
+    } else if (diff < -0.3) {
+      calibrationClass = 'Underconfident (Imposter Syndrome)';
+    }
+
+    // Check if results already exist for this session
+    const { data: existingResults, error: checkError } = await supabase
+      .from('results')
+      .select('id')
+      .eq('session_id', sessionId);
+
+    let saveError = null;
+    if (existingResults && existingResults.length > 0) {
+      // Update existing
+      const { error: updateError } = await supabase
+        .from('results')
+        .update({
+          ranked_gaps: rankedGaps,
+          calibration_score: calibrationClass,
+          blind_spot_score: blindSpotScore
+        })
+        .eq('session_id', sessionId);
+      saveError = updateError;
+    } else {
+      // Insert new
+      const { error: insertError } = await supabase
+        .from('results')
+        .insert([
+          {
+            session_id: sessionId,
+            ranked_gaps: rankedGaps,
+            calibration_score: calibrationClass,
+            blind_spot_score: blindSpotScore
+          }
+        ]);
+      saveError = insertError;
+    }
+
+    if (saveError) {
+      console.error('Supabase save results error:', saveError);
       return res.status(500).json({
         error: 'Failed to save results to database',
-        details: insertError.message
+        details: saveError.message
       });
     }
 
     // Return JSON response
     recordAgentEvent('agent3', 'results_saved', {
       sessionId,
-      rankedGaps
+      rankedGaps,
+      calibrationScore: calibrationClass,
+      blindSpotScore: blindSpotScore
     });
 
     return res.status(200).json({
-      rankedGaps: rankedGaps
+      rankedGaps: rankedGaps,
+      calibrationScore: calibrationClass,
+      blindSpotScore: blindSpotScore
     });
 
   } catch (error) {
-    // Log all errors with console.error showing the full error
-    console.error('Unexpected error in Agent 3 (Gap Ranker) endpoint:', error);
-    return res.status(500).json({
-      error: 'Internal server error in Gap Ranker'
-    });
+    error.clientMessage = 'Internal server error in Gap Ranker';
+    next(error);
   }
 });
 

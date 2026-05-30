@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFlow } from '../context/FlowContext'
 import axios from 'axios'
-import * as d3 from 'd3'
+import ConceptGraph from '../components/ConceptGraph'
+import NodeDetailDrawer from '../components/NodeDetailDrawer'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
@@ -24,8 +25,9 @@ export default function Results() {
   const [realUserModel, setRealUserModel] = useState([])
   const [loadingStep, setLoadingStep] = useState('ranking') // 'ranking' | 'generating'
   const [modalContent, setModalContent] = useState(null)
+  const [calibrationScore, setCalibrationScore] = useState(null)
+  const [blindSpotScore, setBlindSpotScore] = useState(0)
 
-  const svgRef = useRef(null)
 
   // Restore topic and expert graph from localStorage fallback if missing in context (on reload)
   const finalTopic = activeTopic || localStorage.getItem('blindspot_topic') || 'Assessment Results'
@@ -74,20 +76,35 @@ export default function Results() {
       // Call Agent 3 Gap Ranker
       const agent3Res = await axios.post(`${API_URL}/api/agent3`, { sessionId }, { timeout: 30000 })
       const fetchedRankedGaps = agent3Res.data.rankedGaps || []
+      const fetchedCalibrationScore = agent3Res.data.calibrationScore || null
+      const fetchedBlindSpotScore = agent3Res.data.blindSpotScore || 0
+
       setRankedGaps(fetchedRankedGaps)
+      setCalibrationScore(fetchedCalibrationScore)
+      setBlindSpotScore(fetchedBlindSpotScore)
 
       setLoadingStep('generating')
 
-      // Call Agent 4 Socratic Output
-      const agent4Res = await axios.post(`${API_URL}/api/agent4`, { sessionId }, { timeout: 30000 })
+      // Call Agent 4 Socratic Output and Fetch Session details in parallel
+      const [agent4Res, sessionRes] = await Promise.all([
+        axios.post(`${API_URL}/api/agent4`, { sessionId }, { timeout: 30000 }),
+        axios.get(`${API_URL}/api/session/${sessionId}`, { timeout: 30000 })
+      ])
+
       const { questions: fetchedQuestions, learningPath: fetchedLearningPath } = agent4Res.data
       setQuestions(fetchedQuestions || [])
       setLearningPath(fetchedLearningPath || [])
 
-      // Call GET /api/session/${sessionId} to get real userModel
-      const sessionRes = await axios.get(`${API_URL}/api/session/${sessionId}`, { timeout: 30000 })
       const fetchedRealUserModel = sessionRes.data.userModel || []
       setRealUserModel(fetchedRealUserModel)
+
+      // Fallback: if session load returned cached properties, set them
+      if (sessionRes.data.calibrationScore) {
+        setCalibrationScore(sessionRes.data.calibrationScore)
+      }
+      if (sessionRes.data.blindSpotScore) {
+        setBlindSpotScore(sessionRes.data.blindSpotScore)
+      }
 
       setLoading(false)
     } catch (err) {
@@ -101,319 +118,6 @@ export default function Results() {
     }
   }
 
-  // D3 Force-Directed Graph Rendering Hook
-  useEffect(() => {
-    if (!finalGraph || !finalGraph.nodes || finalGraph.nodes.length === 0 || loading) return
-
-    const container = svgRef.current?.parentElement
-    const width = container?.clientWidth || 600
-    const height = 400
-
-    const svg = d3.select(svgRef.current)
-      .attr('width', '100%')
-      .attr('height', height)
-      .attr('viewBox', `0 0 ${width} ${height}`)
-      
-    svg.selectAll('*').remove()
-
-    // 1. Create the virtual root node representing the main topic
-    const rootNode = {
-      id: 'root-topic-center',
-      label: finalTopic,
-      description: `Overall topic: ${finalTopic}`,
-      isRootTopic: true,
-      x: width / 2,
-      y: height / 2,
-      fx: width / 2,
-      fy: height / 2
-    }
-
-    // 2. Identify the Category nodes (Level 1)
-    const inDegrees = {}
-    const outDegrees = {}
-    finalGraph.nodes.forEach(n => {
-      inDegrees[n.id] = 0
-      outDegrees[n.id] = 0
-    })
-    
-    ;(finalGraph.edges || []).forEach(e => {
-      if (inDegrees[e.to] !== undefined) inDegrees[e.to]++
-      if (outDegrees[e.from] !== undefined) outDegrees[e.from]++
-    })
-
-    // Sort to choose the best category candidates: prerequisites (low in-degree) with high out-degree
-    const sortedCandidates = [...finalGraph.nodes].sort((a, b) => {
-      const scoreA = (outDegrees[a.id] || 0) - (inDegrees[a.id] || 0) * 2
-      const scoreB = (outDegrees[b.id] || 0) - (inDegrees[b.id] || 0) * 2
-      return scoreB - scoreA
-    })
-
-    // Select up to 4 Category nodes
-    const categoryIds = sortedCandidates.slice(0, 4).map(n => n.id)
-
-    // Build parent assignments and leaf groups
-    const leafNodes = finalGraph.nodes.filter(n => !categoryIds.includes(n.id))
-    const parentMap = {}
-    const leafGroups = {}
-    categoryIds.forEach(id => { leafGroups[id] = [] })
-
-    // Assign leaf nodes to parent categories
-    leafNodes.forEach(leaf => {
-      let bestCategory = null
-      
-      // Look for a direct incoming dependency from a category node
-      categoryIds.forEach(catId => {
-        const directLink = (finalGraph.edges || []).some(e => e.from === catId && e.to === leaf.id)
-        if (directLink) {
-          bestCategory = catId
-        }
-      })
-
-      // If no direct link, check path from any direct predecessor
-      if (!bestCategory) {
-        const incomingEdges = (finalGraph.edges || []).filter(e => e.to === leaf.id)
-        if (incomingEdges.length > 0) {
-          const parentId = incomingEdges[0].from
-          if (categoryIds.includes(parentId)) {
-            bestCategory = parentId
-          }
-        }
-      }
-
-      parentMap[leaf.id] = bestCategory
-    })
-
-    // Distribute remaining parentless leaf nodes to balance the clusters
-    leafNodes.forEach(leaf => {
-      if (!parentMap[leaf.id]) {
-        let minCat = categoryIds[0]
-        let minCount = Infinity
-        categoryIds.forEach(catId => {
-          if (leafGroups[catId].length < minCount) {
-            minCount = leafGroups[catId].length
-            minCat = catId
-          }
-        })
-        parentMap[leaf.id] = minCat
-      }
-      leafGroups[parentMap[leaf.id]].push(leaf.id)
-    })
-
-    // Map final node objects with category/leaf attributes
-    const nodes = [
-      rootNode,
-      ...finalGraph.nodes.map(n => ({
-        ...n,
-        isRootTopic: false,
-        isCategory: categoryIds.includes(n.id)
-      }))
-    ]
-
-    // Construct the connection links
-    const links = []
-    categoryIds.forEach(catId => {
-      links.push({
-        source: 'root-topic-center',
-        target: catId,
-        isRootLink: true
-      })
-    })
-
-    leafNodes.forEach(leaf => {
-      const catId = parentMap[leaf.id]
-      if (catId) {
-        links.push({
-          source: catId,
-          target: leaf.id,
-          isLeafLink: true
-        })
-      }
-    })
-
-    // Set quadrant-based target x/y positions for simulation constraints
-    function assignTargetPositions(nodesList, currentWidth) {
-      nodesList.forEach(n => {
-        if (n.isRootTopic) {
-          n.targetX = currentWidth / 2
-          n.targetY = height / 2
-          n.fx = currentWidth / 2
-          n.fy = height / 2
-        } else if (n.isCategory) {
-          const idx = categoryIds.indexOf(n.id)
-          const angles = [-Math.PI / 4, -3 * Math.PI / 4, 3 * Math.PI / 4, Math.PI / 4]
-          const radius = 110
-          n.targetX = currentWidth / 2 + Math.cos(angles[idx]) * radius
-          n.targetY = height / 2 + Math.sin(angles[idx]) * radius
-        } else {
-          const catId = parentMap[n.id]
-          const idx = categoryIds.indexOf(catId)
-          const angles = [-Math.PI / 4, -3 * Math.PI / 4, 3 * Math.PI / 4, Math.PI / 4]
-          
-          const leafIndex = leafGroups[catId].indexOf(n.id)
-          const leafCount = leafGroups[catId].length
-          const baseAngle = angles[idx]
-          
-          const spread = Math.PI / 3 // 60-degree radial spread
-          const angleOffset = leafCount > 1 
-            ? (leafIndex / (leafCount - 1) - 0.5) * spread
-            : 0
-            
-          const leafAngle = baseAngle + angleOffset
-          const radius = 200
-          n.targetX = currentWidth / 2 + Math.cos(leafAngle) * radius
-          n.targetY = height / 2 + Math.sin(leafAngle) * radius
-        }
-      })
-    }
-
-    assignTargetPositions(nodes, width)
-
-    const simulation = d3.forceSimulation(nodes)
-      .force('link', d3.forceLink(links).id(d => d.id).distance(d => d.isRootLink ? 110 : 80).strength(0.8))
-      .force('charge', d3.forceManyBody().strength(d => d.isRootTopic ? -350 : d.isCategory ? -120 : -50))
-      .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(d => d.isRootTopic ? 40 : d.isCategory ? 26 : 18))
-      .force('x', d3.forceX(d => d.targetX).strength(d => d.isRootTopic ? 1.5 : d.isCategory ? 0.7 : 0.4))
-      .force('y', d3.forceY(d => d.targetY).strength(d => d.isRootTopic ? 1.5 : d.isCategory ? 0.7 : 0.4))
-
-    // Draw lines/links
-    const link = svg.append('g')
-      .selectAll('line')
-      .data(links)
-      .enter()
-      .append('line')
-      .attr('stroke', d => d.isRootLink ? '#8b5cf6' : '#475569')
-      .attr('stroke-opacity', d => d.isRootLink ? 0.9 : 0.6)
-      .attr('stroke-width', d => d.isRootLink ? 3.5 : 1.5)
-      .attr('stroke-dasharray', d => d.isLeafLink ? '3,3' : null)
-
-    // Draw nodes groups
-    const node = svg.append('g')
-      .selectAll('g')
-      .data(nodes)
-      .enter()
-      .append('g')
-      .attr('class', d => d.isRootTopic ? 'cursor-default' : 'cursor-pointer')
-      .on('click', (event, d) => {
-        if (d.isRootTopic) return
-        const origNode = finalGraph.nodes.find(n => n.id === d.id)
-        if (origNode) {
-          handleNodeSelect(origNode)
-        }
-      })
-      .call(d3.drag()
-        .on('start', dragstarted)
-        .on('drag', dragged)
-        .on('end', dragended)
-      )
-
-    // Node circles with styling dynamic to depth level
-    node.append('circle')
-      .attr('r', d => d.isRootTopic ? 32 : d.isCategory ? 22 : 15)
-      .attr('fill', d => d.isRootTopic ? '#0f172a' : '#090d16')
-      .attr('stroke', d => {
-        if (d.isRootTopic) return '#8b5cf6'
-        const state = userModel.find(item => item.id === d.id)
-        const score = state ? state.confidence : 0
-        const isExplored = state && state.evidence !== 'Unexplored concept'
-        if (!isExplored) return '#ef4444' // Unexplored Gap
-        if (score >= 0.7) return '#10b981' // Mastered
-        if (score >= 0.4) return '#8b5cf6' // Partial
-        return '#f59e0b' // Incomplete
-      })
-      .attr('stroke-width', d => d.isRootTopic ? 4 : d.isCategory ? 3 : 2)
-      .attr('class', d => {
-        if (d.isRootTopic) return ''
-        const state = userModel.find(item => item.id === d.id)
-        const score = state ? state.confidence : 0
-        const isExplored = state && state.evidence !== 'Unexplored concept'
-        if (!isExplored || score < 0.4) {
-          return 'animate-pulse'
-        }
-        return ''
-      })
-      .style('filter', d => {
-        if (d.isRootTopic) return 'drop-shadow(0 0 10px rgba(139,92,246,0.6))'
-        const state = userModel.find(item => item.id === d.id)
-        const score = state ? state.confidence : 0
-        const isExplored = state && state.evidence !== 'Unexplored concept'
-        if (!isExplored) return 'drop-shadow(0 0 6px rgba(239,68,68,0.5))'
-        if (score >= 0.7) return 'drop-shadow(0 0 6px rgba(16,185,129,0.5))'
-        if (score >= 0.4) return 'drop-shadow(0 0 6px rgba(139,92,246,0.5))'
-        return 'drop-shadow(0 0 6px rgba(245,158,11,0.5))'
-      })
-
-    // Short acronym label on nodes (in uppercase)
-    node.append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dy', '.3em')
-      .attr('fill', '#dae2fd')
-      .attr('font-size', d => d.isRootTopic ? '11px' : d.isCategory ? '10px' : '9px')
-      .attr('font-weight', 'black')
-      .text(d => {
-        if (d.isRootTopic) return d.label.slice(0, 3).toUpperCase()
-        return d.label.slice(0, 3).toUpperCase()
-      })
-
-    // Node label below node
-    node.append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dy', d => d.isRootTopic ? '3.8em' : d.isCategory ? '3.5em' : '2.8em')
-      .attr('fill', d => d.isRootTopic ? '#e2e8f0' : d.isCategory ? '#cbd5e1' : '#94a3b8')
-      .attr('font-size', d => d.isRootTopic ? '10px' : d.isCategory ? '9px' : '8px')
-      .attr('font-weight', d => d.isRootTopic ? 'bold' : '500')
-      .text(d => {
-        if (d.isRootTopic) return d.label.length > 20 ? d.label.slice(0, 17) + '...' : d.label
-        return d.label.length > 15 ? d.label.slice(0, 12) + '...' : d.label
-      })
-
-    simulation.on('tick', () => {
-      link
-        .attr('x1', d => d.source.x)
-        .attr('y1', d => d.source.y)
-        .attr('x2', d => d.target.x)
-        .attr('y2', d => d.target.y)
-
-      node
-        .attr('transform', d => `translate(${d.x},${d.y})`)
-    })
-
-    function dragstarted(event, d) {
-      if (!event.active) simulation.alphaTarget(0.3).restart()
-      d.fx = d.x
-      d.fy = d.y
-    }
-
-    function dragged(event, d) {
-      d.fx = event.x
-      d.fy = event.y
-    }
-
-    function dragended(event, d) {
-      if (!event.active) simulation.alphaTarget(0)
-      if (!d.isRootTopic) {
-        d.fx = null
-        d.fy = null
-      }
-    }
-
-    const handleResize = () => {
-      if (!svgRef.current) return
-      const newWidth = svgRef.current.parentElement.clientWidth
-      svg.attr('viewBox', `0 0 ${newWidth} ${height}`)
-      assignTargetPositions(nodes, newWidth)
-      simulation.force('center', d3.forceCenter(newWidth / 2, height / 2))
-      simulation.force('x', d3.forceX(d => d.targetX).strength(d => d.isRootTopic ? 1.5 : d.isCategory ? 0.7 : 0.4))
-      simulation.force('y', d3.forceY(d => d.targetY).strength(d => d.isRootTopic ? 1.5 : d.isCategory ? 0.7 : 0.4))
-      simulation.alpha(0.3).restart()
-    }
-
-    window.addEventListener('resize', handleResize)
-    return () => {
-      window.removeEventListener('resize', handleResize)
-      simulation.stop()
-    }
-  }, [finalGraph, realUserModel, loading])
 
   // Redirect to home if no session exists
   useEffect(() => {
@@ -682,6 +386,94 @@ export default function Results() {
           </div>
         </section>
 
+        {/* Advanced Diagnostics Section */}
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-5 w-full">
+          {/* Blind Spot Score KPI Card */}
+          <div className="glass-card rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-6 border-brand-purple/20 relative overflow-hidden animate-card-in" style={{ animationDelay: '450ms' }}>
+            <div className="flex flex-col gap-2 min-w-0 flex-1 text-center md:text-left">
+              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Blind Spot Index</div>
+              <h3 className="text-lg font-bold text-white">Critical Gap Severity</h3>
+              <p className="text-xs text-gray-400 leading-relaxed mt-1">
+                A weighted metric representing how critical and downstream your unaddressed knowledge gaps are.
+              </p>
+            </div>
+            
+            <div className="relative w-28 h-28 flex-shrink-0 flex items-center justify-center">
+              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                <circle className="text-gray-800" cx="18" cy="18" r="16" fill="none" stroke="currentColor" strokeWidth="2.5"></circle>
+                <circle 
+                  className={`transition-all duration-1000 ${
+                    blindSpotScore < 30 ? 'text-brand-emerald' : blindSpotScore < 70 ? 'text-brand-purple-light' : 'text-red-500 glow-error'
+                  }`} 
+                  cx="18" 
+                  cy="18" 
+                  r="16" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeDasharray={`${blindSpotScore}, 100`} 
+                  strokeWidth="3"
+                ></circle>
+              </svg>
+              <div className="absolute flex flex-col items-center justify-center">
+                <span className="text-2xl font-black text-white leading-none">{blindSpotScore}</span>
+                <span className="text-[9px] text-gray-400 uppercase font-bold tracking-wider mt-0.5">Score</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Confidence Calibration Card */}
+          <div className={`glass-card rounded-2xl p-6 flex flex-col gap-3 justify-between relative overflow-hidden animate-card-in ${
+            calibrationScore?.includes('Dunning-Kruger') ? 'border-red-500/20' : calibrationScore?.includes('Imposter') ? 'border-brand-purple/20' : 'border-brand-emerald/20'
+          }`} style={{ animationDelay: '480ms' }}>
+            {/* Top accent bar */}
+            <div className={`absolute top-0 left-0 w-full h-1 ${
+              calibrationScore?.includes('Dunning-Kruger') ? 'bg-red-500' : calibrationScore?.includes('Imposter') ? 'bg-brand-purple' : 'bg-brand-emerald'
+            }`}></div>
+            
+            <div className="flex flex-col gap-1.5">
+              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Calibration Assessment</div>
+              <h3 className="text-lg font-bold text-white">Mental Model Calibration</h3>
+            </div>
+
+            {calibrationScore ? (
+              <div className="flex items-start gap-4 bg-white/5 border border-brand-border/40 p-4 rounded-xl">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  calibrationScore.includes('Dunning-Kruger') ? 'bg-red-500/10 text-red-400 border border-red-500/20' :
+                  calibrationScore.includes('Imposter') ? 'bg-brand-purple/10 text-brand-purple-light border border-brand-purple/20' :
+                  'bg-brand-emerald/10 text-brand-emerald border border-brand-emerald/20'
+                }`}>
+                  {calibrationScore.includes('Dunning-Kruger') ? (
+                    <span className="material-symbols-outlined text-xl">psychology_alt</span>
+                  ) : calibrationScore.includes('Imposter') ? (
+                    <span className="material-symbols-outlined text-xl">auto_awesome</span>
+                  ) : (
+                    <span className="material-symbols-outlined text-xl">verified</span>
+                  )}
+                </div>
+                <div>
+                  <h4 className={`text-sm font-bold ${
+                    calibrationScore.includes('Dunning-Kruger') ? 'text-red-400' :
+                    calibrationScore.includes('Imposter') ? 'text-brand-purple-light' :
+                    'text-brand-emerald'
+                  }`}>{calibrationScore}</h4>
+                  <p className="text-xs text-gray-300 leading-relaxed mt-1">
+                    {calibrationScore.includes('Dunning-Kruger') && 
+                      "You estimated your understanding to be higher than demonstrated during Socratic dialogue. Focus on fundamentals and test your core assumptions."}
+                    {calibrationScore.includes('Imposter') && 
+                      "You demonstrated a deeper understanding than your initial self-assessment suggested. Trust your intuition more—you know this better than you think!"}
+                    {calibrationScore.includes('Well-calibrated') && 
+                      "Your self-assessment matches your Socratic performance perfectly. You have a highly accurate mental model of your knowledge boundaries."}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-gray-500 italic py-2 text-center">
+                Calibration details will appear once analysis is complete.
+              </div>
+            )}
+          </div>
+        </section>
+
         {/* Live Network Diagram & Dynamic Gaps List split */}
         <div className="flex flex-col gap-8">
           
@@ -696,7 +488,7 @@ export default function Results() {
             
             {/* Visual Node Network */}
             <div className="flex-grow flex items-center justify-center border border-dashed border-brand-border/40 rounded-xl bg-brand-dark/30 my-4 relative overflow-hidden min-h-[400px]">
-              <svg ref={svgRef} className="w-full h-full block"></svg>
+              <ConceptGraph graph={finalGraph} userModel={userModel} onNodeSelect={handleNodeSelect} topic={finalTopic} />
             </div>
 
             <div className="flex gap-4 items-center justify-center text-[10px] text-gray-400">
@@ -885,119 +677,12 @@ export default function Results() {
       </footer>
 
       {/* Detail Slide-out Drawer */}
-      {selectedNode && (
-        <div className={`fixed inset-0 z-50 flex justify-end transition-opacity duration-300 ${isDrawerOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-          {/* Backdrop Overlay */}
-          <div 
-            onClick={() => setIsDrawerOpen(false)}
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm cursor-pointer"
-          />
-          
-          {/* Drawer Container */}
-          <div 
-            className={`relative z-10 w-full sm:w-[420px] h-full bg-[#0B0F19]/95 backdrop-blur-2xl border-l border-brand-border/40 p-6 flex flex-col gap-6 shadow-[0_0_50px_rgba(0,0,0,0.8)] drawer-transition transform ${
-              isDrawerOpen ? 'translate-x-0' : 'translate-x-full'
-            }`}
-          >
-            {/* Close Button */}
-            <button 
-              onClick={() => setIsDrawerOpen(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-lg">close</span>
-            </button>
-
-            {/* Drawer Header */}
-            <div className="pr-8">
-              <span className="text-[10px] font-bold text-brand-purple-light uppercase tracking-widest">Concept Diagnostics</span>
-              <h2 className="text-xl font-bold text-white mt-1 pr-4">{selectedNode.label}</h2>
-            </div>
-
-            <div className="flex flex-col gap-5 overflow-y-auto pr-1 pb-6">
-              {/* Status Badge */}
-              <div>
-                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Understanding Level</div>
-                {(() => {
-                  const conf = selectedNode.confidence;
-                  let badgeText = 'Mastered';
-                  let badgeColor = 'text-brand-emerald border-brand-emerald/20 bg-brand-emerald/10 glow-emerald';
-                  if (conf < 0.4) {
-                    badgeText = 'Blind Spot';
-                    badgeColor = 'text-red-500 border-red-500/20 bg-red-500/10 shadow-glow-error animate-pulse';
-                  } else if (conf < 0.7) {
-                    badgeText = 'Partial';
-                    badgeColor = 'text-brand-purple border-brand-purple/20 bg-brand-purple/10 glow-primary';
-                  }
-                  return (
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-bold ${badgeColor}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${conf < 0.4 ? 'bg-red-500' : conf < 0.7 ? 'bg-brand-purple' : 'bg-brand-emerald'}`}></span>
-                      {badgeText} ({Math.round(conf * 100)}%)
-                    </span>
-                  );
-                })()}
-              </div>
-
-              {/* Unlock Score */}
-              <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Unlock Score</span>
-                  <span className="text-xs font-bold text-brand-purple-light">{selectedNode.unlock_score || selectedNode.priority || 0} / 10</span>
-                </div>
-                <div className="w-full h-2.5 bg-black/40 rounded-full overflow-hidden border border-brand-border/20">
-                  <div 
-                    className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-purple-light transition-all duration-500" 
-                    style={{ width: `${((selectedNode.unlock_score || selectedNode.priority || 0) / 10) * 100}%` }}
-                  ></div>
-                </div>
-                <span className="text-[10px] text-gray-500 mt-1 block">Higher scores indicate concept dependencies that unlock multiple downstream ideas.</span>
-              </div>
-
-              {/* Description */}
-              {selectedNode.description && (
-                <div className="bg-brand-card/40 border border-brand-border/30 rounded-xl p-3.5">
-                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Concept Description</div>
-                  <p className="text-xs text-gray-300 leading-relaxed">{selectedNode.description}</p>
-                </div>
-              )}
-
-              {/* Diagnostic Evidence */}
-              <div className="bg-[#0b0f19] border border-brand-border/40 rounded-xl p-3.5">
-                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">AI Diagnostic Evidence</div>
-                <p className="text-xs text-gray-300 leading-relaxed italic">"{selectedNode.evidence}"</p>
-              </div>
-
-              {/* Learning Path Topological Order */}
-              {selectedNode.sequenceOrder !== null && (
-                <div className="flex items-center gap-3 bg-brand-purple/10 border border-brand-purple/20 rounded-xl p-3.5">
-                  <div className="w-8 h-8 rounded-full bg-brand-purple text-white flex items-center justify-center text-xs font-bold flex-shrink-0 glow-primary">
-                    {selectedNode.sequenceOrder}
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-bold text-brand-purple-light uppercase tracking-widest">Learning Path Order</div>
-                    <p className="text-xs text-gray-300">This concept is step #{selectedNode.sequenceOrder} in your study plan.</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Socratic Practice Question */}
-              {selectedNode.question && (
-                <div className="bg-gradient-to-br from-brand-purple/20 to-indigo-950/20 border border-brand-purple/40 rounded-xl p-4 flex flex-col gap-2.5">
-                  <div className="flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-brand-purple-light text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>help</span>
-                    <span className="text-[10px] font-bold text-brand-purple-light uppercase tracking-widest">Socratic practice question</span>
-                  </div>
-                  <p className="text-xs text-white font-bold leading-relaxed">{selectedNode.question}</p>
-                  {selectedNode.questionWhy && (
-                    <div className="text-[10.5px] text-gray-400">
-                      <span className="font-bold text-brand-purple-light">Core Intent:</span> {selectedNode.questionWhy}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <NodeDetailDrawer 
+        isOpen={isDrawerOpen} 
+        onClose={() => setIsDrawerOpen(false)} 
+        node={selectedNode} 
+        mode="results" 
+      />
 
       {/* Details Modals (for Privacy, Terms, Ethics) */}
       {modalContent && (

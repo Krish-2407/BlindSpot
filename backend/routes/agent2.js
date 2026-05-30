@@ -3,15 +3,8 @@ const router = express.Router();
 const supabase = require('../config/supabase');
 const groq = require('../config/groq');
 const { recordAgentEvent, normalizeError } = require('../utils/agentTrace');
-
-function sanitizeInput(text) {
-  if (!text || typeof text !== 'string') return '';
-  return text
-    .replace(/[\[\]\{\}\\]/g, '')
-    .replace(/ignore\s+(?:previous|above|system|all)\s+instructions/gi, '')
-    .replace(/ignore\s+instructions/gi, '')
-    .trim();
-}
+const { sanitizeInput } = require('../utils/sanitize');
+const { generateFallbackReply } = require('../utils/fallbacks');
 
 function isLowEffortMessage(text) {
   if (!text || text.trim().length < 5) return true;
@@ -23,37 +16,7 @@ function isLowEffortMessage(text) {
   return false;
 }
 
-function generateFallbackReply(userMessage, conceptsList, turnNumber) {
-  const responses = [
-    `Could you explain what ${conceptsList[0]?.label || 'the fundamentals'} mean in your own words?`,
-    `How does that relate to ${conceptsList[Math.min(2, conceptsList.length - 1)]?.label || 'other concepts'}?`,
-    `Why do you think it is designed to work this way?`,
-    `What is a common mistake beginners make when working with this?`,
-    `How does it connect to ${conceptsList[conceptsList.length - 1]?.label || 'advanced concepts'}?`
-  ];
-  
-  const turnIndex = Math.floor(turnNumber / 2);
-  const reply = responses[Math.min(turnIndex, responses.length - 1)] || "Could you clarify that?";
-
-  const updatedConceptIndex = Math.min(turnIndex, conceptsList.length - 1);
-  const conceptId = conceptsList[updatedConceptIndex]?.id;
-
-  const confidenceUpdates = [];
-  if (conceptId) {
-    confidenceUpdates.push({
-      id: conceptId,
-      confidence: Math.min(1.0, 0.2 + (turnIndex * 0.15)),
-      evidence: `Demonstrates basic understanding of ${conceptsList[updatedConceptIndex]?.label} in Socratic dialogue.`
-    });
-  }
-
-  return {
-    reply,
-    confidence_updates: confidenceUpdates
-  };
-}
-
-router.post('/', async (req, res) => {
+router.post('/', async (req, res, next) => {
   try {
     const { sessionId, messages, userMessage } = req.body;
 
@@ -196,17 +159,33 @@ router.post('/', async (req, res) => {
 
     const currentConceptId = priorityConceptsNodes[0]?.id || null;
 
+    // Check if user provides a brief or shallow response (less than 8 words)
+    const isBriefOrShallow = cleanedMessage.split(/\s+/).filter(Boolean).length < 8;
+    let briefNote = '';
+    if (isBriefOrShallow && !isFinalTurn && answeredTurns > 0) {
+      const lastDiscussed = discussedIds[discussedIds.length - 1];
+      const targetFollowup = lastDiscussed || currentConceptId;
+      briefNote = `\n\nNOTE: The learner's last response was brief or shallow. Do NOT move on to a new concept yet. Instead, you MUST ask a deeper, targeted follow-up question on the concept "${targetFollowup}" to prompt them for details.`;
+    }
+
     const turnLabel = isFinalTurn ? 'final' : `turn ${answeredTurns + 1}`;
     const finalInstruction = isFinalTurn
       ? 'This is the final 5th answer of the assessment. Do not ask any new question. Provide a short concise closing response instead of another question.'
       : `This is ${turnLabel} of a 5-turn assessment. These are the highest value unknown concepts to explore — pick the FIRST one the student has not discussed:\n${priorityConcepts || 'None'}\n\nAsk ONE natural question about the first concept in this list. Mention the concept name naturally.\nUnder 20 words. Conversational tone.`;
 
+    const userModelSummary = userModel
+      .map(c => `- ${c.id}: current confidence is ${c.confidence.toFixed(2)} (${c.confidence < 0.4 ? 'weak/unexplored' : c.confidence < 0.7 ? 'partial' : 'mastered'})`)
+      .join('\n');
+
     const systemPrompt = `You are a Socratic tutor for: ${sessionData.topic}
+
+The student's current assessed concept confidence levels:
+${userModelSummary}
 
 The student already knows: ${knownList || 'None'}
 DO NOT ask about any of these. Treat them as mastered.
 
-${finalInstruction}
+${finalInstruction}${briefNote}
 
 CRITICAL LANGUAGE CONSTRAINT: The user's messages in the conversation history might be written in Hindi (in Devanagari script) or a mix of Hindi and English. You must understand it, but you MUST write your Socratic reply ("reply") and any evidence descriptions in "confidence_updates" exclusively in English. Translate any Hindi terms or replies internally.
 
@@ -351,7 +330,11 @@ Respond ONLY in valid JSON. No markdown. No explanation. No backticks.
     }
 
     // 9. Append tutor's reply to history
-    history.push({ role: 'assistant', content: reply, discussed_concept: currentConceptId });
+    const activeDiscussedConcept = (confidenceUpdates && confidenceUpdates.length > 0)
+      ? confidenceUpdates[0].id
+      : currentConceptId;
+
+    history.push({ role: 'assistant', content: reply, discussed_concept: activeDiscussedConcept });
 
     recordAgentEvent('agent2', 'reply_ready', {
       sessionId,
@@ -407,10 +390,8 @@ Respond ONLY in valid JSON. No markdown. No explanation. No backticks.
     });
 
   } catch (error) {
-    console.error('Error in agent2 endpoint:', error);
-    return res.status(500).json({
-      error: 'Internal server error in Mental Model Extractor'
-    });
+    error.clientMessage = 'Internal server error in Mental Model Extractor';
+    next(error);
   }
 });
 

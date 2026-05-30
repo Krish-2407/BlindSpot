@@ -3,7 +3,7 @@ const router = express.Router();
 const supabase = require('../config/supabase');
 
 // GET /api/session/:sessionId
-router.get('/:sessionId', async (req, res) => {
+router.get('/:sessionId', async (req, res, next) => {
   try {
     const { sessionId } = req.params;
 
@@ -40,7 +40,7 @@ router.get('/:sessionId', async (req, res) => {
     // 3. Query the results table (only exists if user finished conversation)
     const { data: resultsData, error: resultsError } = await supabase
       .from('results')
-      .select('ranked_gaps, questions')
+      .select('ranked_gaps, questions, calibration_score, blind_spot_score')
       .eq('session_id', sessionId)
       .maybeSingle();
 
@@ -56,14 +56,14 @@ router.get('/:sessionId', async (req, res) => {
       chatHistory: convData ? convData.messages : [],
       userModel: convData ? convData.user_model : [],
       rankedGaps: resultsData ? resultsData.ranked_gaps : null,
-      questions: resultsData ? resultsData.questions : null
+      questions: resultsData ? resultsData.questions : null,
+      calibrationScore: resultsData ? resultsData.calibration_score : null,
+      blindSpotScore: resultsData ? resultsData.blind_spot_score : null
     });
 
   } catch (error) {
-    console.error('Error fetching session data:', error);
-    return res.status(500).json({
-      error: 'Internal server error while fetching session'
-    });
+    error.clientMessage = 'Internal server error while fetching session';
+    next(error);
   }
 });
 

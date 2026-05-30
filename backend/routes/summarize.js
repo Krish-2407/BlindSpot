@@ -3,7 +3,7 @@ const router = express.Router();
 const groq = require('../config/groq');
 
 // POST /api/summarize
-router.post('/', async (req, res) => {
+router.post('/', async (req, res, next) => {
   try {
     const { text } = req.body;
 
@@ -37,11 +37,8 @@ router.post('/', async (req, res) => {
     return res.status(200).json({ summary });
 
   } catch (error) {
-    console.error('Error during AI summarization:', error);
-    return res.status(500).json({
-      error: 'Internal server error during summarization',
-      message: error.message
-    });
+    error.clientMessage = 'Internal server error during summarization';
+    next(error);
   }
 });
 

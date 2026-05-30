@@ -3,42 +3,9 @@ const router = express.Router();
 const groq = require('../config/groq');
 const supabase = require('../config/supabase');
 const { recordAgentEvent, normalizeError } = require('../utils/agentTrace');
+const { generateFallbackSocratic } = require('../utils/fallbacks');
 
-function generateFallbackSocratic(topGaps) {
-  const questionTemplates = [
-    (label) => `How would you explain the core mechanism behind ${label} to a developer who has never used it?`,
-    (label) => `What is the primary design problem that ${label} solves, and how does it prevent bugs?`,
-    (label) => `If you had to build a simple version of ${label} from scratch, what would your first step be?`,
-    (label) => `Why does ${label} require careful reference stability, and what happens if it gets re-created on every render?`,
-    (label) => `What common pitfalls or edge cases do developers encounter when working with ${label} in production?`
-  ];
-
-  const questions = topGaps.map((gap, index) => {
-    const template = questionTemplates[index % questionTemplates.length];
-    return {
-      order: index + 1,
-      concept: gap.concept,
-      label: gap.label,
-      question: template(gap.label),
-      why_this_matters: gap.why || `Understanding ${gap.label} is crucial for managing application state and logic.`
-    };
-  });
-
-  const learningPath = topGaps.map((gap, index) => {
-    return {
-      order: index + 1,
-      concept: gap.concept,
-      label: gap.label,
-      unlocks: gap.downstream && gap.downstream.length > 0 
-        ? gap.downstream 
-        : [`Advanced ${gap.label} patterns`]
-    };
-  });
-
-  return { questions, learning_path: learningPath };
-}
-
-router.post('/', async (req, res) => {
+router.post('/', async (req, res, next) => {
   try {
     const { sessionId } = req.body;
 
@@ -231,11 +198,8 @@ No markdown. No backticks. No explanation. JSON only:
     });
 
   } catch (error) {
-    // Log all errors with console.error showing full error
-    console.error('Unexpected error in Agent 4 (Socratic Output) endpoint:', error);
-    return res.status(500).json({
-      error: 'Internal server error in Socratic Output'
-    });
+    error.clientMessage = 'Internal server error in Socratic Output';
+    next(error);
   }
 });
 
