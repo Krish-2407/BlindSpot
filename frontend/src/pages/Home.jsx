@@ -123,6 +123,7 @@ export default function Home() {
   const [speechSupported, setSpeechSupported] = useState(false);
   const [recognition, setRecognition] = useState(null);
   const [voiceLang, setVoiceLang] = useState('en-US');
+  const [interimText, setInterimText] = useState('');
 
   // Initialize Speech Recognition on Mount / Lang change
   useEffect(() => {
@@ -131,28 +132,47 @@ export default function Home() {
       setSpeechSupported(true);
       const rec = new SpeechRecognition();
       rec.continuous = true;
-      rec.interimResults = false;
+      rec.interimResults = true;
       rec.lang = voiceLang;
 
       rec.onresult = (event) => {
-        let transcript = event.results[event.results.length - 1][0].transcript;
-        if (voiceLang === 'hi-IN') {
-          transcript = transliterateDevanagari(transcript);
+        let finalTranscript = '';
+        let interimTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          let text = event.results[i][0].transcript;
+          if (voiceLang === 'hi-IN') {
+            text = transliterateDevanagari(text);
+          }
+          
+          if (event.results[i].isFinal) {
+            finalTranscript += text;
+          } else {
+            interimTranscript += text;
+          }
         }
-        setExplanation((prev) => {
-          const separator = prev.trim() === '' ? '' : ' ';
-          const updated = prev + separator + transcript;
-          return updated.slice(0, 10000); // Cap at max limit
-        });
+
+        if (finalTranscript) {
+          setExplanation((prev) => {
+            const separator = prev.trim() === '' ? '' : ' ';
+            const updated = prev + separator + finalTranscript;
+            return updated.slice(0, 10000); // Cap at max limit
+          });
+          setInterimText('');
+        } else {
+          setInterimText(interimTranscript);
+        }
       };
 
       rec.onerror = (event) => {
         console.error('Speech recognition error:', event.error);
         setIsListening(false);
+        setInterimText('');
       };
 
       rec.onend = () => {
         setIsListening(false);
+        setInterimText('');
       };
 
       setRecognition(rec);
@@ -262,6 +282,15 @@ export default function Home() {
         @keyframes shimmer {
           0% { transform: translateX(-100%); }
           100% { transform: translateX(100%); }
+        }
+        @keyframes wave-bounce {
+          0%, 100% { transform: scaleY(0.35); }
+          50% { transform: scaleY(1); }
+        }
+        .wave-bar {
+          display: inline-block;
+          transform-origin: bottom;
+          animation: wave-bounce 0.8s ease-in-out infinite;
         }
         .shimmer-bg {
           position: absolute;
@@ -473,25 +502,34 @@ export default function Home() {
                   rows="4"
                   maxLength={10000}
                   disabled={loading}
-                  value={explanation}
+                  value={explanation + (interimText ? (explanation.trim() === '' ? '' : ' ') + interimText : '')}
                   onChange={(e) => setExplanation(transliterateDevanagari(e.target.value))}
                   placeholder="Explain what you understand. (Optional, up to 10k chars. Speak or type)" 
-                  className="w-full bg-transparent border-none text-white placeholder-gray-500 focus:ring-0 text-sm resize-none p-1.5 leading-relaxed focus:outline-none pr-10"
+                  className="w-full bg-transparent border-none text-white placeholder-gray-500 focus:ring-0 text-sm resize-none p-1.5 leading-relaxed focus:outline-none pr-[80px]"
                 />
                 {/* Voice Dictation Microphone Trigger */}
                 {speechSupported && (
-                  <button
-                    type="button"
-                    onClick={toggleListening}
-                    className={`absolute bottom-3 right-3 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-                      isListening 
-                        ? 'bg-red-600/80 text-white animate-pulse shadow-[0_0_10px_rgba(220,38,38,0.5)]' 
-                        : 'bg-brand-card hover:bg-brand-border/40 text-gray-400 hover:text-white border border-brand-border/40'
-                    }`}
-                    title={isListening ? "Stop listening" : "Start speaking"}
-                  >
-                    <i className={`fa-solid ${isListening ? 'fa-microphone-slash text-xs' : 'fa-microphone text-xs'}`}></i>
-                  </button>
+                  <div className="absolute bottom-3 right-3 flex items-center gap-2">
+                    {isListening && (
+                      <div className="flex items-end gap-0.5 h-4 px-1.5 mb-1.5">
+                        <span className="w-[2px] bg-red-500 wave-bar" style={{ animationDelay: '0s', height: '100%' }}></span>
+                        <span className="w-[2px] bg-red-500 wave-bar" style={{ animationDelay: '0.2s', height: '60%' }}></span>
+                        <span className="w-[2px] bg-red-500 wave-bar" style={{ animationDelay: '0.4s', height: '80%' }}></span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={toggleListening}
+                      className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                        isListening 
+                          ? 'bg-red-650 text-white shadow-[0_0_12px_rgba(220,38,38,0.45)]' 
+                          : 'bg-brand-card hover:bg-brand-border/40 text-gray-400 hover:text-white border border-brand-border/40'
+                      }`}
+                      title={isListening ? "Stop listening" : "Start speaking"}
+                    >
+                      <i className={`fa-solid ${isListening ? 'fa-microphone-slash text-xs' : 'fa-microphone text-xs'}`}></i>
+                    </button>
+                  </div>
                 )}
               </div>
               
