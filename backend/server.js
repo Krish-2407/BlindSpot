@@ -10,6 +10,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Apply middlewares
+if (!process.env.FRONTEND_URL) {
+  console.warn('WARNING: FRONTEND_URL is not set. CORS is open to all origins. Set FRONTEND_URL in production!');
+}
 const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173'
@@ -28,7 +31,7 @@ app.use(cors({
   },
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '50kb' }));
 
 // Mount routers
 app.use('/api/agent1', agent1Router);
@@ -40,6 +43,11 @@ app.use('/api/agent4', agent4Router);
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date() });
+});
+
+// 404 catch-all for unknown routes
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found' });
 });
 
 // Run server listen within try/catch block
@@ -59,8 +67,8 @@ if (RENDER_URL) {
     try {
       await fetch(`${RENDER_URL}/health`)
       console.log('Keep-alive ping sent')
-    } catch (error) {
-      console.log('Keep-alive ping failed:', error.message)
+    } catch (pingError) {
+      console.log('Keep-alive ping failed:', pingError.message)
     }
   }, 14 * 60 * 1000) // ping every 14 minutes
 }

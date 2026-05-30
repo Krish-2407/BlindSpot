@@ -12,7 +12,10 @@ export function FlowProvider({ children }) {
     const saved = localStorage.getItem('blindspot_expert_graph')
     return saved ? JSON.parse(saved) : null
   })
-  const [chatHistory, setChatHistory] = useState([])
+  const [chatHistory, setChatHistoryState] = useState(() => {
+    const saved = localStorage.getItem('blindspot_chat_history')
+    return saved ? JSON.parse(saved) : []
+  })
 
   // Helper to sync route changes with screen state
   const setActiveScreen = useCallback((screen) => {
@@ -47,15 +50,25 @@ export function FlowProvider({ children }) {
     }
   }, [])
 
+  const setChatHistory = useCallback((history) => {
+    setChatHistoryState(history)
+    if (history && history.length > 0) {
+      localStorage.setItem('blindspot_chat_history', JSON.stringify(history))
+    } else {
+      localStorage.removeItem('blindspot_chat_history')
+    }
+  }, [])
+
   const resetFlow = useCallback(() => {
     setActiveScreenState('home')
     setSessionIdState(null)
     setActiveTopicState('')
     setMasterGraphState(null)
-    setChatHistory([])
+    setChatHistoryState([])
     localStorage.removeItem('blindspot_session_id')
     localStorage.removeItem('blindspot_topic')
     localStorage.removeItem('blindspot_expert_graph')
+    localStorage.removeItem('blindspot_chat_history')
   }, [])
 
   const value = {

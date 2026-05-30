@@ -34,7 +34,7 @@ export default function Home() {
       const response = await axios.post(`${API_URL}/api/agent1`, {
         topic: topic.trim(),
         openingExplanation: explanation.trim()
-      })
+      }, { timeout: 30000 })
 
       const { sessionId, expertGraph } = response.data
       

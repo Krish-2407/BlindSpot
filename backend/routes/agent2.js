@@ -112,13 +112,6 @@ router.post('/', async (req, res) => {
       // Initialize with messages from request body (if any) or empty array
       history = Array.isArray(messages) ? [...messages] : [];
 
-      // If the user provided an opening explanation when creating the session,
-      // include it as an initial user message so the Socratic tutor knows what
-      // the user already stated and will avoid re-asking about those concepts.
-      if (openingExplanation && !history.find(m => m.content === openingExplanation)) {
-        history.unshift({ role: 'user', content: openingExplanation });
-      }
-
       // Initialize user model with all concepts set to confidence 0.0
       userModel = conceptsList.map(c => ({
         id: c.id,
@@ -130,9 +123,10 @@ router.post('/', async (req, res) => {
     // 4. Append user's message
     history.push({ role: 'user', content: userMessage.trim() });
 
-    // 5. Build prompt
     const expert_graph = expertGraph;
     const opening_explanation = openingExplanation;
+    const answeredTurns = history.filter(m => m.role === 'user').length - 1;
+    const isFinalTurn = answeredTurns >= 5;
 
     const knownConcepts = expert_graph.nodes
       .filter(n => {
@@ -180,21 +174,21 @@ router.post('/', async (req, res) => {
     const currentConceptId = priorityConceptsNodes[0]?.id || null;
 
     const historyText = history.map(m => `${m.role === 'user' ? 'User' : 'Tutor'}: ${m.content}`).join('\n');
+    const turnLabel = isFinalTurn ? 'final' : `turn ${answeredTurns + 1}`;
+    const finalInstruction = isFinalTurn
+      ? 'This is the final 5th answer of the assessment. Do not ask any new question. Provide a short concise closing response instead of another question.'
+      : `This is ${turnLabel} of a 5-turn assessment. These are the highest value unknown concepts to explore — pick the FIRST one the student has not discussed:\n${priorityConcepts || 'None'}\n\nAsk ONE natural question about the first concept in this list. Mention the concept name naturally.\nUnder 20 words. Conversational tone.`;
 
     const prompt = `You are a Socratic tutor for: ${sessionData.topic}
 
 The student already knows: ${knownList || 'None'}
 DO NOT ask about any of these. Treat them as mastered.
 
-These are the highest value unknown concepts to explore — pick the FIRST one the student has not discussed:
-${priorityConcepts || 'None'}
-
-Ask ONE natural question about the first concept in this list. Mention the concept name naturally.
-Under 20 words. Conversational tone.
+${finalInstruction}
 
 Respond ONLY in this exact JSON format, no markdown:
 {
-  "reply": "your single conversational question here",
+  "reply": "your single conversational response here",
   "confidence_updates": [
     { "id": "concept_id", "confidence": 0.0, "evidence": "what they said" }
   ]

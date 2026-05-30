@@ -62,7 +62,7 @@ export default function Conversation() {
             sessionId,
             messages: [],
             userMessage: initialMessage
-          })
+          }, { timeout: 30000 })
           const { reply, updatedUserModel } = response.data
           setChatHistory([
             ...updatedHistory,
@@ -108,7 +108,7 @@ export default function Conversation() {
         sessionId,
         messages: cleanHistory,
         userMessage: userMsgText
-      })
+      }, { timeout: 30000 })
 
       const { reply, updatedUserModel } = response.data
 

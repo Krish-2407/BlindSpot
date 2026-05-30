@@ -105,7 +105,7 @@ if (process.env.MOCK_DB === 'true') {
   supabase = new SupabaseMock();
 } else {
   if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Missing Supabase environment variables: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+    throw new Error('Missing Supabase environment variables: SUPABASE_URL and/or SUPABASE_ANON_KEY');
   }
 
   if (!supabaseServiceRoleKey) {

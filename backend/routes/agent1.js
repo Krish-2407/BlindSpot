@@ -136,11 +136,15 @@ router.post('/', async (req, res) => {
       openingExplanation: openingExplanation || ''
     });
 
-    // 2. Prepare Gemini Prompt
+    // 2. Prepare Groq Prompt
+    const explanationContext = openingExplanation && openingExplanation.trim()
+      ? `\nThe learner provided this self-assessment of their current knowledge:\n"${openingExplanation.trim()}"\nUse this to emphasize concepts they seem weak on and include concepts they may be overconfident about.\n`
+      : '';
+
     const prompt = `You are an expert educator and knowledge graph builder.
 Generate a comprehensive concept dependency graph for 
 the topic: ${topic}
-
+${explanationContext}
 You MUST generate between 15 and 25 concept nodes.
 This is mandatory. Do not generate fewer than 15 nodes.
 

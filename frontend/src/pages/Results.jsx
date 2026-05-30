@@ -30,12 +30,12 @@ export default function Results() {
 
       // Step 2 - Sequential API calls
       // Call Agent 3 Gap Ranker
-      const agent3Res = await axios.post(`${API_URL}/api/agent3`, { sessionId })
+      const agent3Res = await axios.post(`${API_URL}/api/agent3`, { sessionId }, { timeout: 30000 })
       const fetchedRankedGaps = agent3Res.data.rankedGaps || []
       setRankedGaps(fetchedRankedGaps)
 
       // Call Agent 4 Socratic Output
-      const agent4Res = await axios.post(`${API_URL}/api/agent4`, { sessionId })
+      const agent4Res = await axios.post(`${API_URL}/api/agent4`, { sessionId }, { timeout: 30000 })
       const { questions: fetchedQuestions, learningPath: fetchedLearningPath } = agent4Res.data
       setQuestions(fetchedQuestions || [])
       setLearningPath(fetchedLearningPath || [])
@@ -43,15 +43,23 @@ export default function Results() {
       setLoading(false)
     } catch (err) {
       console.error('Error fetching results:', err)
-      setError("We couldn't load your results. Please go back and try again.")
+      if (err.code === 'ECONNABORTED') {
+        setError('The analysis is taking too long. Please try again.')
+      } else {
+        setError("We couldn't load your results. Please go back and try again.")
+      }
       setLoading(false)
     }
   }
 
-  // Fetch results on component mount
+  // Redirect to home if no session exists
   useEffect(() => {
+    if (!sessionId) {
+      navigate('/')
+      return
+    }
     fetchResultsData()
-  }, [])
+  }, [sessionId])
 
   // Restore topic and expert graph from localStorage fallback if missing in context (on reload)
   const finalTopic = activeTopic || localStorage.getItem('blindspot_topic') || 'Assessment Results'
@@ -353,18 +361,22 @@ export default function Results() {
                         <span className="text-[10px] font-bold truncate max-w-[28px]">{node.label.slice(0, 3)}</span>
                       </div>
 
-                      {/* SVG Line linking to center */}
-                      <svg className="absolute inset-0 w-full h-full pointer-events-none opacity-20">
-                        <line 
-                          x1="50%" 
-                          y1="50%" 
-                          x2={`calc(50% + ${x}px)`} 
-                          y2={`calc(50% + ${y}px)`} 
-                          stroke={score >= 0.7 ? '#10b981' : score >= 0.4 ? '#8b5cf6' : '#ef4444'} 
-                          strokeWidth="1.5" 
-                          strokeDasharray="4"
-                        />
-                      </svg>
+                      {/* Connector line to center using CSS */}
+                      <div 
+                        className="absolute pointer-events-none opacity-20"
+                        style={{
+                          left: '50%',
+                          top: '50%',
+                          width: `${Math.sqrt(x * x + y * y)}px`,
+                          height: '1.5px',
+                          background: score >= 0.7 ? '#10b981' : score >= 0.4 ? '#8b5cf6' : '#ef4444',
+                          transformOrigin: '0 0',
+                          transform: `rotate(${Math.atan2(y, x)}rad)`,
+                          backgroundImage: 'repeating-linear-gradient(90deg, currentColor 0px, currentColor 4px, transparent 4px, transparent 8px)',
+                          backgroundColor: 'transparent',
+                          borderTop: `1.5px dashed ${score >= 0.7 ? '#10b981' : score >= 0.4 ? '#8b5cf6' : '#ef4444'}`
+                        }}
+                      />
                     </React.Fragment>
                   )
                 })}
