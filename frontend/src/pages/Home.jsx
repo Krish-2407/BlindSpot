@@ -55,8 +55,9 @@ export default function Home() {
   const [isListening, setIsListening] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [recognition, setRecognition] = useState(null);
+  const [voiceLang, setVoiceLang] = useState('en-US');
 
-  // Initialize Speech Recognition on Mount
+  // Initialize Speech Recognition on Mount / Lang change
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -64,7 +65,7 @@ export default function Home() {
       const rec = new SpeechRecognition();
       rec.continuous = true;
       rec.interimResults = false;
-      rec.lang = 'en-US';
+      rec.lang = voiceLang;
 
       rec.onresult = (event) => {
         const transcript = event.results[event.results.length - 1][0].transcript;
@@ -94,7 +95,7 @@ export default function Home() {
         }
       };
     }
-  }, []);
+  }, [voiceLang]);
 
   const toggleListening = () => {
     if (!recognition) return;
@@ -381,9 +382,21 @@ export default function Home() {
                 <label className="block text-[12px] font-bold text-gray-300 uppercase tracking-widest">
                   Opening Explanation (Optional)
                 </label>
-                <span className={`text-[10px] font-semibold ${explanation.length > 2000 ? 'text-red-400 font-extrabold' : 'text-gray-500'}`}>
-                  {explanation.length} / 10,000
-                </span>
+                <div className="flex items-center gap-2">
+                  {speechSupported && (
+                    <select
+                      value={voiceLang}
+                      onChange={(e) => setVoiceLang(e.target.value)}
+                      className="bg-[#0b071e] border border-brand-border/40 text-gray-400 text-[10px] rounded px-1.5 py-0.5 focus:outline-none cursor-pointer hover:text-white transition-colors"
+                    >
+                      <option value="en-US">English</option>
+                      <option value="hi-IN">Hindi (हिन्दी)</option>
+                    </select>
+                  )}
+                  <span className={`text-[10px] font-semibold ${explanation.length > 2000 ? 'text-red-400 font-extrabold' : 'text-gray-500'}`}>
+                    {explanation.length} / 10,000
+                  </span>
+                </div>
               </div>
               <div className="relative glass-input rounded-xl p-1 flex flex-col">
                 <textarea 

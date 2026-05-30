@@ -133,6 +133,8 @@ Consider:
 - How fundamental this concept is to the topic
 - How far the student is from understanding it
 
+CRITICAL LANGUAGE CONSTRAINT: All output strings (such as the "why" reason explaining why this gap matters) MUST be written exclusively in English. Translate any non-English terms internally if necessary.
+
 Respond ONLY in this exact JSON format. 
 No markdown. No backticks. No explanation. JSON only:
 {

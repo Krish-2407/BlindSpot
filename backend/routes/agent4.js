@@ -100,6 +100,8 @@ PART 2 - Write a learning path:
 - Order the concepts so each one naturally unlocks the next
 - Show what each concept unlocks when learned
 
+CRITICAL LANGUAGE CONSTRAINT: All output strings (specifically the Socratic "question", "why_this_matters", and learning path details) MUST be written exclusively in English. Translate any non-English terms internally if necessary.
+
 Respond ONLY in this exact JSON format.
 No markdown. No backticks. No explanation. JSON only:
 {

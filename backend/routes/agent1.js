@@ -155,6 +155,8 @@ Think about everything a true expert in ${topic} would know:
 - Advanced topics
 - Common pitfalls and edge cases
 
+CRITICAL LANGUAGE CONSTRAINT: Even if the topic or learner self-assessment is written in Hindi (in Devanagari script) or is a mix of Hindi and English (Hinglish), you MUST output all JSON values (node labels, descriptions, IDs) exclusively in English. Translate any Hindi terms to standard English.
+
 Return ONLY valid JSON. No markdown. No backticks. 
 No explanation. Start directly with { and end with }
 

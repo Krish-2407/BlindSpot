@@ -186,6 +186,8 @@ DO NOT ask about any of these. Treat them as mastered.
 
 ${finalInstruction}
 
+CRITICAL LANGUAGE CONSTRAINT: The user's messages in the conversation history might be written in Hindi (in Devanagari script) or a mix of Hindi and English. You must understand it, but you MUST write your Socratic reply ("reply") and any evidence descriptions in "confidence_updates" exclusively in English. Translate any Hindi terms or replies internally.
+
 Respond ONLY in this exact JSON format, no markdown:
 {
   "reply": "your single conversational response here",
