@@ -7,6 +7,7 @@ const agent2Router = require('./routes/agent2');
 const agent3Router = require('./routes/agent3');
 const agent4Router = require('./routes/agent4');
 const sessionRouter = require('./routes/session');
+const summarizeRouter = require('./routes/summarize');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -51,6 +52,7 @@ app.use('/api/agent2', agent2Router);
 app.use('/api/agent3', agent3Router);
 app.use('/api/agent4', agent4Router);
 app.use('/api/session', sessionRouter);
+app.use('/api/summarize', summarizeRouter);
 
 
 // Health check endpoint

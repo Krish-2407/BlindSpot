@@ -52,6 +52,85 @@ export default function Home() {
     }
   };
 
+  const [isListening, setIsListening] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const [recognition, setRecognition] = useState(null);
+
+  // Initialize Speech Recognition on Mount
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      setSpeechSupported(true);
+      const rec = new SpeechRecognition();
+      rec.continuous = true;
+      rec.interimResults = false;
+      rec.lang = 'en-US';
+
+      rec.onresult = (event) => {
+        const transcript = event.results[event.results.length - 1][0].transcript;
+        setExplanation((prev) => {
+          const separator = prev.trim() === '' ? '' : ' ';
+          const updated = prev + separator + transcript;
+          return updated.slice(0, 10000); // Cap at max limit
+        });
+      };
+
+      rec.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+      };
+
+      rec.onend = () => {
+        setIsListening(false);
+      };
+
+      setRecognition(rec);
+
+      return () => {
+        try {
+          rec.stop();
+        } catch (e) {
+          // ignore if already stopped or not active
+        }
+      };
+    }
+  }, []);
+
+  const toggleListening = () => {
+    if (!recognition) return;
+    if (isListening) {
+      recognition.stop();
+      setIsListening(false);
+    } else {
+      try {
+        recognition.start();
+        setIsListening(true);
+      } catch (e) {
+        console.error('Failed to start speech recognition:', e);
+      }
+    }
+  };
+
+  const handleSummarize = async () => {
+    if (explanation.length <= 2000) return;
+    setLoading(true);
+    setError('');
+    setLoadingStep('diagnosing');
+    try {
+      const response = await axios.post(`${API_URL}/api/summarize`, {
+        text: explanation
+      }, { timeout: 30000 });
+      
+      setExplanation(response.data.summary);
+    } catch (err) {
+      console.error(err);
+      setError('Failed to summarize explanation. Please edit manually or try again.');
+    } finally {
+      setLoading(false);
+      setLoadingStep('');
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!topic.trim()) return
@@ -299,27 +378,67 @@ export default function Home() {
             {/* Explanation Input */}
             <div>
               <div className="flex justify-between items-center mb-1.5 ml-0.5">
-                <label className="block text-[12px] font-bold text-gray-300 uppercase tracking-widest">Opening Explanation (Optional)</label>
-                <span className="text-[10px] text-gray-500">{explanation.length} / 1000</span>
+                <label className="block text-[12px] font-bold text-gray-300 uppercase tracking-widest">
+                  Opening Explanation (Optional)
+                </label>
+                <span className={`text-[10px] font-semibold ${explanation.length > 2000 ? 'text-red-400 font-extrabold' : 'text-gray-500'}`}>
+                  {explanation.length} / 10,000
+                </span>
               </div>
-              <div className="relative glass-input rounded-xl p-1">
+              <div className="relative glass-input rounded-xl p-1 flex flex-col">
                 <textarea 
-                  rows="3"
-                  maxLength={1000}
+                  rows="4"
+                  maxLength={10000}
                   disabled={loading}
                   value={explanation}
                   onChange={(e) => setExplanation(e.target.value)}
-                  placeholder="Explain what you think you understand. This helps the AI customize diagnostic Socratic questions faster." 
-                  className="w-full bg-transparent border-none text-white placeholder-gray-500 focus:ring-0 text-sm resize-none p-1.5 leading-relaxed focus:outline-none"
+                  placeholder="Explain what you understand. (Optional, up to 10k chars. Speak or type)" 
+                  className="w-full bg-transparent border-none text-white placeholder-gray-500 focus:ring-0 text-sm resize-none p-1.5 leading-relaxed focus:outline-none pr-10"
                 />
+                {/* Voice Dictation Microphone Trigger */}
+                {speechSupported && (
+                  <button
+                    type="button"
+                    onClick={toggleListening}
+                    className={`absolute bottom-3 right-3 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                      isListening 
+                        ? 'bg-red-600/80 text-white animate-pulse shadow-[0_0_10px_rgba(220,38,38,0.5)]' 
+                        : 'bg-brand-card hover:bg-brand-border/40 text-gray-400 hover:text-white border border-brand-border/40'
+                    }`}
+                    title={isListening ? "Stop listening" : "Start speaking"}
+                  >
+                    <i className={`fa-solid ${isListening ? 'fa-microphone-slash text-xs' : 'fa-microphone text-xs'}`}></i>
+                  </button>
+                )}
               </div>
+              
+              {/* AI Summarization Banner */}
+              {explanation.length > 2000 && (
+                <div className="mt-2.5 bg-brand-purple/10 border border-brand-purple/20 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 animate-fade-in">
+                  <div className="flex items-start gap-2">
+                    <i className="fa-solid fa-circle-info text-brand-purple-light mt-0.5"></i>
+                    <p className="text-[11px] text-gray-300 leading-relaxed max-w-[300px]">
+                      Your explanation is very detailed. Condense it below 2,000 characters for optimal AI mapping.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSummarize}
+                    disabled={loading}
+                    className="self-end sm:self-center px-3 py-1.5 rounded-lg bg-brand-purple text-white text-xs font-bold transition-all hover:bg-brand-purple-light active:scale-95 disabled:opacity-50 whitespace-nowrap"
+                  >
+                    <i className="fa-solid fa-wand-magic-sparkles mr-1.5"></i>
+                    Summarize with AI
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Actions/Submit inside form for tighter alignment */}
             <div className="flex flex-col gap-3 mt-1">
               <button
                 type="submit"
-                disabled={loading || !topic.trim()}
+                disabled={loading || !topic.trim() || explanation.length > 2000}
                 className="group relative w-full overflow-hidden rounded-xl bg-gradient-to-r from-brand-purple to-indigo-600 p-[1px] transition-all hover:scale-[1.01] active:scale-95 shadow-[0_0_20px_rgba(139,92,246,0.2)] disabled:opacity-50 disabled:scale-100 disabled:shadow-none"
               >
                 <div className="relative flex items-center justify-center gap-2 rounded-[11px] bg-gradient-to-r from-brand-purple to-indigo-600 px-6 py-2.5 transition-all group-hover:from-brand-purple-light group-hover:to-brand-purple-dark">
