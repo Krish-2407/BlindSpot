@@ -219,7 +219,8 @@ Respond ONLY in valid JSON. No markdown. No explanation. No backticks.
       const chatCompletion = await groq.chat.completions.create({
         model: "llama-3.3-70b-versatile",
         response_format: { type: "json_object" },
-        messages: groqMessages
+        messages: groqMessages,
+        max_tokens: 100
       });
       
       let parsed;

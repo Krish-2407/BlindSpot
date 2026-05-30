@@ -136,7 +136,8 @@ No markdown. No backticks. No explanation. JSON only:
       const chatCompletion = await groq.chat.completions.create({
         model: "llama-3.3-70b-versatile",
         response_format: { type: "json_object" },
-        messages: [{ role: "user", content: prompt }]
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 300
       });
       let geminiText = chatCompletion.choices[0].message.content.trim();
 
