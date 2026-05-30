@@ -131,33 +131,66 @@ router.post('/', async (req, res) => {
     history.push({ role: 'user', content: userMessage.trim() });
 
     // 5. Build prompt
-    const conceptsText = JSON.stringify(conceptsList, null, 2);
+    const expert_graph = expertGraph;
+    const opening_explanation = openingExplanation;
+
+    const knownConcepts = expert_graph.nodes
+      .filter(n => {
+        const openingLower = opening_explanation.toLowerCase();
+        const labelLower = n.label.toLowerCase();
+        const idLower = n.id.toLowerCase();
+        
+        if (openingLower.includes(labelLower) || openingLower.includes(idLower)) {
+          return true;
+        }
+
+        const openingWords = openingLower.split(/[^a-z0-9]+/).filter(w => w.length >= 3);
+        const stopWords = ['the', 'and', 'for', 'with', 'from', 'this', 'that', 'its', 'are', 'there'];
+        
+        for (const word of openingWords) {
+          if (stopWords.includes(word)) continue;
+          if (labelLower.includes(word) || idLower.includes(word)) {
+            return true;
+          }
+        }
+        
+        return false;
+      })
+      .map(n => n.id);
+
+    const discussedIds = history
+      .filter(m => m.discussed_concept)
+      .map(m => m.discussed_concept);
+
+    const priorityConceptsNodes = expert_graph.nodes
+      .filter(n => !knownConcepts.includes(n.id))
+      .filter(n => !discussedIds.includes(n.id))
+      .sort((a, b) => b.unlock_score - a.unlock_score)
+      .slice(0, 8);
+
+    const priorityConcepts = priorityConceptsNodes
+      .map(n => `- ${n.id}: ${n.label} (unlock score: ${n.unlock_score}) — ${n.description}`)
+      .join('\n');
+
+    const knownList = expert_graph.nodes
+      .filter(n => knownConcepts.includes(n.id))
+      .map(n => n.label)
+      .join(', ');
+
+    const currentConceptId = priorityConceptsNodes[0]?.id || null;
+
     const historyText = history.map(m => `${m.role === 'user' ? 'User' : 'Tutor'}: ${m.content}`).join('\n');
 
-    const prompt = `You are a friendly Socratic learning companion helping 
-someone discover their knowledge gaps. You are NOT a 
-technical interviewer. You are a curious friend.
+    const prompt = `You are a Socratic tutor for: ${sessionData.topic}
 
-Your conversation rules:
-- Ask ONE simple, conversational question per turn
-- Start easy, get gradually deeper over 5 turns
-- Ask about concepts the user has NOT mentioned yet
-- Never repeat a question you already asked
-- Never ask about scaling, production, or test cases
-- Keep questions under 20 words
-- Sound human, not robotic
+The student already knows: ${knownList || 'None'}
+DO NOT ask about any of these. Treat them as mastered.
 
-Turn 1: Ask them to explain one basic concept simply
-Turn 2: Ask about a related concept they haven't mentioned
-Turn 3: Ask why something works the way it does
-Turn 4: Ask about a common mistake beginners make
-Turn 5: Ask about the most advanced concept they haven't touched
+These are the highest value unknown concepts to explore — pick the FIRST one the student has not discussed:
+${priorityConcepts || 'None'}
 
-Expert knowledge graph for reference: ${JSON.stringify(expertGraph)}
-
-After each user message, score their confidence on 
-concepts they touched. Be honest — if they said 
-'I don't know', score that concept 0.0.
+Ask ONE natural question about the first concept in this list. Mention the concept name naturally.
+Under 20 words. Conversational tone.
 
 Respond ONLY in this exact JSON format, no markdown:
 {
@@ -263,8 +296,26 @@ ${historyText}`;
       }
     }
 
+    // Merge preSeededModel with existing user_model before saving to Supabase.
+    const preSeededModel = knownConcepts.map(id => ({
+      id,
+      confidence: 0.85,
+      evidence: 'Mentioned in opening explanation'
+    }));
+
+    for (const seed of preSeededModel) {
+      const idx = userModel.findIndex(item => item.id === seed.id);
+      if (idx !== -1) {
+        if (userModel[idx].confidence === 0.0 && userModel[idx].evidence === 'Initial state') {
+          userModel[idx] = seed;
+        }
+      } else {
+        userModel.push(seed);
+      }
+    }
+
     // 9. Append tutor's reply to history
-    history.push({ role: 'assistant', content: reply });
+    history.push({ role: 'assistant', content: reply, discussed_concept: currentConceptId });
 
     recordAgentEvent('agent2', 'reply_ready', {
       sessionId,
