@@ -79,7 +79,7 @@ router.post('/', async (req, res) => {
       topGaps
     });
 
-    // Step 3 - Send to Gemini with this exact prompt
+    // Step 3 - Send to Groq with this exact prompt
     const prompt = `You are a master Socratic teacher for a learning app.
 A student has these knowledge gaps, ranked by importance:
 
@@ -137,27 +137,27 @@ No markdown. No backticks. No explanation. JSON only:
         model: "llama-3.3-70b-versatile",
         response_format: { type: "json_object" },
         messages: [{ role: "user", content: prompt }],
-        max_tokens: 300
+        max_tokens: 500
       });
-      let geminiText = chatCompletion.choices[0].message.content.trim();
+      let rawText = chatCompletion.choices[0].message.content.trim();
 
       // Clean response by stripping markdown backticks
-      if (geminiText.startsWith('```')) {
-        geminiText = geminiText.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
+      if (rawText.startsWith('```')) {
+        rawText = rawText.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
       }
 
-      const tempParsed = JSON.parse(geminiText);
+      const tempParsed = JSON.parse(rawText);
       if (!tempParsed.questions || !tempParsed.learning_path) {
         throw new Error('Groq response missing questions or learning_path field.');
       }
       parsed = tempParsed;
       recordAgentEvent('agent4', 'groq_response_parsed', {
         sessionId,
-        rawResponse: geminiText,
+        rawResponse: rawText,
         parsed
       });
     } catch (apiError) {
-      console.warn('Groq API call failed. Falling back to dynamic mock Socratic generation. Error:', apiError.message || apiError);
+      console.warn('Groq API call failed. Falling back to dynamic mock Socratic generation. Error:', apiError.message);
       parsed = generateFallbackSocratic(topGaps);
       recordAgentEvent('agent4', 'fallback_used', {
         sessionId,
@@ -234,8 +234,7 @@ No markdown. No backticks. No explanation. JSON only:
     // Log all errors with console.error showing full error
     console.error('Unexpected error in Agent 4 (Socratic Output) endpoint:', error);
     return res.status(500).json({
-      error: 'Internal server error in Socratic Output',
-      message: error.message
+      error: 'Internal server error in Socratic Output'
     });
   }
 });

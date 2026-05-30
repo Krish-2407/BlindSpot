@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const agent1Router = require('./routes/agent1');
 const agent2Router = require('./routes/agent2');
@@ -35,6 +36,21 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json({ limit: '50kb' }));
+
+// Security headers
+app.use(helmet());
+
+// API response time logging
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    if (req.path.startsWith('/api')) {
+      console.log(`${req.method} ${req.path} — ${res.statusCode} — ${duration}ms`);
+    }
+  });
+  next();
+});
 
 // Apply rate limiter to all API routes
 const apiLimiter = rateLimit({

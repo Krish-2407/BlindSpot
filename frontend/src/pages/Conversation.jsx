@@ -102,7 +102,7 @@ export default function Conversation() {
     ]
     setChatHistory(updatedHistory)
 
-    // Filter out error messages from context history to maintain Gemini consistency
+    // Filter out error messages from context history to maintain Groq consistency
     const cleanHistory = chatHistory.filter(m => m.role === 'user' || (m.role === 'assistant' && m.userModelSnapshot))
 
     try {

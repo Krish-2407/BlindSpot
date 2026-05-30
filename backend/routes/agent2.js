@@ -4,6 +4,25 @@ const supabase = require('../config/supabase');
 const groq = require('../config/groq');
 const { recordAgentEvent, normalizeError } = require('../utils/agentTrace');
 
+function sanitizeInput(text) {
+  if (!text || typeof text !== 'string') return '';
+  return text
+    .replace(/[\[\]\{\}\\]/g, '')
+    .replace(/ignore\s+(?:previous|above|system|all)\s+instructions/gi, '')
+    .replace(/ignore\s+instructions/gi, '')
+    .trim();
+}
+
+function isLowEffortMessage(text) {
+  if (!text || text.trim().length < 5) return true;
+  const trimmed = text.trim();
+  // All repeated characters (e.g. "aaaaaaa")
+  if (/^(.)\1{4,}$/.test(trimmed)) return true;
+  // No alphabetic characters at all
+  if (/^[^a-zA-Z]*$/.test(trimmed)) return true;
+  return false;
+}
+
 function generateFallbackReply(userMessage, conceptsList, turnNumber) {
   const responses = [
     `Could you explain what ${conceptsList[0]?.label || 'the fundamentals'} mean in your own words?`,
@@ -44,6 +63,9 @@ router.post('/', async (req, res) => {
     }
     if (!userMessage || typeof userMessage !== 'string' || !userMessage.trim()) {
       return res.status(400).json({ error: 'Missing or invalid required field: userMessage' });
+    }
+    if (userMessage.length > 5000) {
+      return res.status(400).json({ error: 'Message too long. Maximum 5,000 characters.' });
     }
 
     // Step 1 - Log sessionId received
@@ -120,8 +142,9 @@ router.post('/', async (req, res) => {
       }));
     }
 
-    // 4. Append user's message
-    history.push({ role: 'user', content: userMessage.trim() });
+    // 4. Append user's message (sanitized)
+    const cleanedMessage = sanitizeInput(userMessage);
+    history.push({ role: 'user', content: cleanedMessage.trim() });
 
     const expert_graph = expertGraph;
     const opening_explanation = openingExplanation;
@@ -205,6 +228,17 @@ Respond ONLY in valid JSON. No markdown. No explanation. No backticks.
 
     let reply;
     let confidenceUpdates = [];
+
+    // Check for low-effort/gibberish input — skip Groq to save tokens and prevent bad confidence updates
+    if (isLowEffortMessage(cleanedMessage)) {
+      reply = "I need a more detailed response to assess your understanding. Could you elaborate on what you know about this concept?";
+      confidenceUpdates = [];
+      recordAgentEvent('agent2', 'low_effort_detected', {
+        sessionId,
+        topic: sessionData.topic,
+        originalMessage: userMessage.trim()
+      });
+    } else {
     try {
       // 6. Call Groq
       recordAgentEvent('agent2', 'groq_request', {
@@ -273,6 +307,7 @@ Respond ONLY in valid JSON. No markdown. No explanation. No backticks.
         confidenceUpdates
       });
     }
+    } // end of else (non-low-effort)
 
     // 8. Merge confidence updates into userModel
     const validConceptIds = (expertGraph.nodes || []).map(node => node.id);
@@ -374,8 +409,7 @@ Respond ONLY in valid JSON. No markdown. No explanation. No backticks.
   } catch (error) {
     console.error('Error in agent2 endpoint:', error);
     return res.status(500).json({
-      error: 'Internal server error in Mental Model Extractor',
-      message: error.message
+      error: 'Internal server error in Mental Model Extractor'
     });
   }
 });

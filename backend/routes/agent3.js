@@ -119,7 +119,7 @@ router.post('/', async (req, res) => {
       userModel
     });
 
-    // Step 4 - Send gaps to Gemini for ranking
+    // Step 4 - Send gaps to Groq for ranking
     const prompt = `You are a knowledge gap analyst for a learning app.
 A student has just completed a diagnostic conversation.
 Based on their performance, here are their knowledge gaps:
@@ -163,25 +163,25 @@ No markdown. No backticks. No explanation. JSON only:
         response_format: { type: "json_object" },
         messages: [{ role: "user", content: prompt }]
       });
-      let geminiText = chatCompletion.choices[0].message.content.trim();
+      let rawText = chatCompletion.choices[0].message.content.trim();
 
       // Clean response by stripping markdown backticks
-      if (geminiText.startsWith('```')) {
-        geminiText = geminiText.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
+      if (rawText.startsWith('```')) {
+        rawText = rawText.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
       }
 
-      const parsedResult = JSON.parse(geminiText);
+      const parsedResult = JSON.parse(rawText);
       if (!parsedResult.ranked_gaps || !Array.isArray(parsedResult.ranked_gaps)) {
         throw new Error('Groq response missing ranked_gaps field or it is not an array.');
       }
       rankedGaps = parsedResult.ranked_gaps;
       recordAgentEvent('agent3', 'groq_response_parsed', {
         sessionId,
-        rawResponse: geminiText,
+        rawResponse: rawText,
         rankedGaps
       });
     } catch (apiError) {
-      console.warn('Groq API call failed. Falling back to dynamic JS gap ranking. Error:', apiError.message || apiError);
+      console.warn('Groq API call failed. Falling back to dynamic JS gap ranking. Error:', apiError.message);
       rankedGaps = generateFallbackRankedGaps(gaps, expertGraph);
       recordAgentEvent('agent3', 'fallback_used', {
         sessionId,
@@ -224,8 +224,7 @@ No markdown. No backticks. No explanation. JSON only:
     // Log all errors with console.error showing the full error
     console.error('Unexpected error in Agent 3 (Gap Ranker) endpoint:', error);
     return res.status(500).json({
-      error: 'Internal server error in Gap Ranker',
-      message: error.message
+      error: 'Internal server error in Gap Ranker'
     });
   }
 });

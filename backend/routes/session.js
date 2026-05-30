@@ -62,8 +62,7 @@ router.get('/:sessionId', async (req, res) => {
   } catch (error) {
     console.error('Error fetching session data:', error);
     return res.status(500).json({
-      error: 'Internal server error while fetching session',
-      message: error.message
+      error: 'Internal server error while fetching session'
     });
   }
 });

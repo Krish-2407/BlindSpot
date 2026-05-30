@@ -143,6 +143,12 @@ router.post('/', async (req, res) => {
     if (!topic || typeof topic !== 'string' || !topic.trim()) {
       return res.status(400).json({ error: 'Missing or invalid required field: topic' });
     }
+    if (topic.length > 500) {
+      return res.status(400).json({ error: 'Topic too long. Maximum 500 characters.' });
+    }
+    if (openingExplanation && openingExplanation.length > 10000) {
+      return res.status(400).json({ error: 'Opening explanation too long. Maximum 10,000 characters.' });
+    }
 
     recordAgentEvent('agent1', 'request_received', {
       topic: topic.trim(),
@@ -311,7 +317,7 @@ Remember: minimum 15 nodes, maximum 25 nodes.`;
   } catch (error) {
     console.error('Agent 1 Error:', error)
     res.status(500).json({ 
-      error: error.message
+      error: 'Internal server error in Expert Knowledge Mapper'
     })
   }
 });
