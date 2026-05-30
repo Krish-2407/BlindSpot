@@ -173,13 +173,12 @@ router.post('/', async (req, res) => {
 
     const currentConceptId = priorityConceptsNodes[0]?.id || null;
 
-    const historyText = history.map(m => `${m.role === 'user' ? 'User' : 'Tutor'}: ${m.content}`).join('\n');
     const turnLabel = isFinalTurn ? 'final' : `turn ${answeredTurns + 1}`;
     const finalInstruction = isFinalTurn
       ? 'This is the final 5th answer of the assessment. Do not ask any new question. Provide a short concise closing response instead of another question.'
       : `This is ${turnLabel} of a 5-turn assessment. These are the highest value unknown concepts to explore — pick the FIRST one the student has not discussed:\n${priorityConcepts || 'None'}\n\nAsk ONE natural question about the first concept in this list. Mention the concept name naturally.\nUnder 20 words. Conversational tone.`;
 
-    const prompt = `You are a Socratic tutor for: ${sessionData.topic}
+    const systemPrompt = `You are a Socratic tutor for: ${sessionData.topic}
 
 The student already knows: ${knownList || 'None'}
 DO NOT ask about any of these. Treat them as mastered.
@@ -188,16 +187,21 @@ ${finalInstruction}
 
 CRITICAL LANGUAGE CONSTRAINT: The user's messages in the conversation history might be written in Hindi (in Devanagari script) or a mix of Hindi and English. You must understand it, but you MUST write your Socratic reply ("reply") and any evidence descriptions in "confidence_updates" exclusively in English. Translate any Hindi terms or replies internally.
 
-Respond ONLY in this exact JSON format, no markdown:
+Respond ONLY in valid JSON. No markdown. No explanation. No backticks.
 {
   "reply": "your single conversational response here",
   "confidence_updates": [
     { "id": "concept_id", "confidence": 0.0, "evidence": "what they said" }
   ]
-}
+}`;
 
-Conversation history:
-${historyText}`;
+    const groqMessages = [
+      { role: 'system', content: systemPrompt },
+      ...history.map(m => ({
+        role: m.role === 'user' ? 'user' : 'assistant',
+        content: m.content
+      }))
+    ];
 
     let reply;
     let confidenceUpdates = [];
@@ -215,7 +219,7 @@ ${historyText}`;
       const chatCompletion = await groq.chat.completions.create({
         model: "llama-3.3-70b-versatile",
         response_format: { type: "json_object" },
-        messages: [{ role: "user", content: prompt }]
+        messages: groqMessages
       });
       
       let parsed;

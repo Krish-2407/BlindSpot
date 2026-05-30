@@ -18,7 +18,7 @@ Most learning tools answer your questions. BlindSpot finds the ones you never kn
 
 ## The 4-Agent AI Pipeline
 
-All four agents run on a single Gemini API key — different prompts, same model.
+All four agents run on a single Groq API key — different prompts, same model (Llama 3.3 70B).
 
 | Agent | Name | Job |
 |-------|------|-----|
@@ -33,9 +33,9 @@ All four agents run on a single Gemini API key — different prompts, same model
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React + Vite + Tailwind CSS |
+| Frontend | React + Vite + Tailwind CSS + D3.js |
 | Backend | Node.js + Express |
-| AI | Google Gemini API |
+| AI | Groq API (Llama-3.3-70b-versatile) |
 | Database | Supabase (PostgreSQL) |
 | Frontend Host | Vercel |
 | Backend Host | Railway |
@@ -58,7 +58,7 @@ blindspot/
 
 ## Built For
 
-OpenAI x Outskill — AI Builders Hackathon 2025
+Groq x Outskill — AI Builders Hackathon 2026
 
 ---
 

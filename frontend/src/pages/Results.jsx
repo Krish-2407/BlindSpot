@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFlow } from '../context/FlowContext'
 import axios from 'axios'
+import * as d3 from 'd3'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
@@ -19,6 +20,45 @@ export default function Results() {
   const [selectedNode, setSelectedNode] = useState(null)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
 
+  // Remediation Plan states
+  const [realUserModel, setRealUserModel] = useState([])
+  const [loadingStep, setLoadingStep] = useState('ranking') // 'ranking' | 'generating'
+  const [modalContent, setModalContent] = useState(null)
+
+  const svgRef = useRef(null)
+
+  // Restore topic and expert graph from localStorage fallback if missing in context (on reload)
+  const finalTopic = activeTopic || localStorage.getItem('blindspot_topic') || 'Assessment Results'
+  const localGraphText = localStorage.getItem('blindspot_expert_graph')
+  const finalGraph = masterGraph || (localGraphText ? JSON.parse(localGraphText) : null)
+  const graphNodes = finalGraph?.nodes || []
+
+  // Reconstruct user model confidence mapping using real data from the backend
+  const userModel = graphNodes.map(node => {
+    const realMatch = realUserModel.find(u => u.id === node.id);
+    if (realMatch) {
+      return {
+        id: node.id,
+        confidence: realMatch.confidence,
+        evidence: realMatch.evidence || 'Identified gap'
+      };
+    }
+    const gap = rankedGaps.find(g => g.concept === node.id);
+    if (gap) {
+      const calculatedConf = Math.max(0.05, Math.min(0.49, 0.5 - (gap.priority * 0.045)));
+      return {
+        id: node.id,
+        confidence: calculatedConf,
+        evidence: gap.why || 'Identified gap'
+      };
+    }
+    return {
+      id: node.id,
+      confidence: 0.0,
+      evidence: 'Unexplored concept'
+    };
+  })
+
   const fetchResultsData = async () => {
     if (!sessionId) {
       setError('No session found. Please start a new assessment.')
@@ -29,18 +69,25 @@ export default function Results() {
     try {
       setLoading(true)
       setError(null)
+      setLoadingStep('ranking')
 
-      // Step 2 - Sequential API calls
       // Call Agent 3 Gap Ranker
       const agent3Res = await axios.post(`${API_URL}/api/agent3`, { sessionId }, { timeout: 30000 })
       const fetchedRankedGaps = agent3Res.data.rankedGaps || []
       setRankedGaps(fetchedRankedGaps)
+
+      setLoadingStep('generating')
 
       // Call Agent 4 Socratic Output
       const agent4Res = await axios.post(`${API_URL}/api/agent4`, { sessionId }, { timeout: 30000 })
       const { questions: fetchedQuestions, learningPath: fetchedLearningPath } = agent4Res.data
       setQuestions(fetchedQuestions || [])
       setLearningPath(fetchedLearningPath || [])
+
+      // Call GET /api/session/${sessionId} to get real userModel
+      const sessionRes = await axios.get(`${API_URL}/api/session/${sessionId}`, { timeout: 30000 })
+      const fetchedRealUserModel = sessionRes.data.userModel || []
+      setRealUserModel(fetchedRealUserModel)
 
       setLoading(false)
     } catch (err) {
@@ -54,6 +101,173 @@ export default function Results() {
     }
   }
 
+  // D3 Force-Directed Graph Rendering Hook
+  useEffect(() => {
+    if (!finalGraph || !finalGraph.nodes || finalGraph.nodes.length === 0 || loading) return
+
+    const container = svgRef.current?.parentElement
+    const width = container?.clientWidth || 600
+    const height = 400
+
+    const svg = d3.select(svgRef.current)
+      .attr('width', '100%')
+      .attr('height', height)
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      
+    svg.selectAll('*').remove()
+
+    // Add arrow markers for links
+    svg.append('defs').append('marker')
+      .attr('id', 'arrow')
+      .attr('viewBox', '0 -5 10 10')
+      .attr('refX', 24)
+      .attr('refY', 0)
+      .attr('markerWidth', 6)
+      .attr('markerHeight', 6)
+      .attr('orient', 'auto')
+      .append('path')
+      .attr('d', 'M0,-5L10,0L0,5')
+      .attr('fill', '#475569')
+
+    // Create copies of nodes/links
+    const nodes = finalGraph.nodes.map(d => ({ ...d }))
+    const links = (finalGraph.edges || []).map(d => ({
+      source: d.from,
+      target: d.to
+    })).filter(l => 
+      nodes.some(n => n.id === l.source) && nodes.some(n => n.id === l.target)
+    )
+
+    const simulation = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(links).id(d => d.id).distance(120))
+      .force('charge', d3.forceManyBody().strength(-150))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('collision', d3.forceCollide().radius(32))
+
+    // Draw links
+    const link = svg.append('g')
+      .selectAll('line')
+      .data(links)
+      .enter()
+      .append('line')
+      .attr('stroke', '#334155')
+      .attr('stroke-opacity', 0.8)
+      .attr('stroke-width', 1.5)
+      .attr('marker-end', 'url(#arrow)')
+
+    // Draw nodes groups
+    const node = svg.append('g')
+      .selectAll('g')
+      .data(nodes)
+      .enter()
+      .append('g')
+      .attr('class', 'cursor-pointer')
+      .on('click', (event, d) => {
+        const origNode = finalGraph.nodes.find(n => n.id === d.id)
+        if (origNode) {
+          handleNodeSelect(origNode)
+        }
+      })
+      .call(d3.drag()
+        .on('start', dragstarted)
+        .on('drag', dragged)
+        .on('end', dragended)
+      )
+
+    // Node circles with styling dynamic to confidence scores
+    node.append('circle')
+      .attr('r', 18)
+      .attr('fill', '#090d16')
+      .attr('stroke', d => {
+        const state = userModel.find(item => item.id === d.id)
+        const score = state ? state.confidence : 0
+        const isExplored = state && state.evidence !== 'Initial state'
+        if (!isExplored) return '#ef4444' // Unexplored Gap (pulsing red)
+        if (score >= 0.7) return '#10b981' // Mastered
+        if (score >= 0.4) return '#8b5cf6' // Partial
+        return '#f59e0b' // Incomplete
+      })
+      .attr('stroke-width', 2.5)
+      .attr('class', d => {
+        const state = userModel.find(item => item.id === d.id)
+        const score = state ? state.confidence : 0
+        const isExplored = state && state.evidence !== 'Initial state'
+        if (!isExplored || score < 0.4) {
+          return 'animate-pulse'
+        }
+        return ''
+      })
+      .style('filter', d => {
+        const state = userModel.find(item => item.id === d.id)
+        const score = state ? state.confidence : 0
+        const isExplored = state && state.evidence !== 'Initial state'
+        if (!isExplored) return 'drop-shadow(0 0 6px rgba(239,68,68,0.5))'
+        if (score >= 0.7) return 'drop-shadow(0 0 6px rgba(16,185,129,0.5))'
+        if (score >= 0.4) return 'drop-shadow(0 0 6px rgba(139,92,246,0.5))'
+        return 'drop-shadow(0 0 6px rgba(245,158,11,0.5))'
+      })
+
+    // Labels on nodes
+    node.append('text')
+      .attr('text-anchor', 'middle')
+      .attr('dy', '.3em')
+      .attr('fill', '#dae2fd')
+      .attr('font-size', '10px')
+      .attr('font-weight', 'bold')
+      .text(d => d.label.slice(0, 3).toUpperCase())
+
+    // Node label below node
+    node.append('text')
+      .attr('text-anchor', 'middle')
+      .attr('dy', '2.5em')
+      .attr('fill', '#94a3b8')
+      .attr('font-size', '9px')
+      .attr('font-weight', '500')
+      .text(d => d.label.length > 15 ? d.label.slice(0, 12) + '...' : d.label)
+
+    simulation.on('tick', () => {
+      link
+        .attr('x1', d => d.source.x)
+        .attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x)
+        .attr('y2', d => d.target.y)
+
+      node
+        .attr('transform', d => `translate(${d.x},${d.y})`)
+    })
+
+    function dragstarted(event, d) {
+      if (!event.active) simulation.alphaTarget(0.3).restart()
+      d.fx = d.x
+      d.fy = d.y
+    }
+
+    function dragged(event, d) {
+      d.fx = event.x
+      d.fy = event.y
+    }
+
+    function dragended(event, d) {
+      if (!event.active) simulation.alphaTarget(0)
+      d.fx = null
+      d.fy = null
+    }
+
+    const handleResize = () => {
+      if (!svgRef.current) return
+      const newWidth = svgRef.current.parentElement.clientWidth
+      svg.attr('viewBox', `0 0 ${newWidth} ${height}`)
+      simulation.force('center', d3.forceCenter(newWidth / 2, height / 2))
+      simulation.alpha(0.3).restart()
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      simulation.stop()
+    }
+  }, [finalGraph, realUserModel, loading])
+
   // Redirect to home if no session exists
   useEffect(() => {
     if (!sessionId) {
@@ -63,10 +277,7 @@ export default function Results() {
     fetchResultsData()
   }, [sessionId])
 
-  // Restore topic and expert graph from localStorage fallback if missing in context (on reload)
-  const finalTopic = activeTopic || localStorage.getItem('blindspot_topic') || 'Assessment Results'
-  const localGraphText = localStorage.getItem('blindspot_expert_graph')
-  const finalGraph = masterGraph || (localGraphText ? JSON.parse(localGraphText) : null)
+  // Graph variables are now declared at the top of the component
 
   if (loading) {
     return (
@@ -76,8 +287,17 @@ export default function Results() {
         <div className="flex flex-col items-center gap-5 relative z-10">
           <div className="w-12 h-12 border-4 border-brand-purple/20 border-t-brand-purple rounded-full animate-spin shadow-[0_0_15px_rgba(168,85,247,0.4)]"></div>
           <div className="text-center">
-            <p className="text-base font-bold text-white tracking-wide animate-pulse">Analyzing your knowledge gaps...</p>
-            <p className="text-xs text-brand-purple-light font-medium mt-1 animate-pulse delay-75">Mapping your blind spots...</p>
+            {loadingStep === 'ranking' ? (
+              <>
+                <p className="text-base font-bold text-white tracking-wide animate-pulse">Ranking Gaps...</p>
+                <p className="text-xs text-brand-purple-light font-medium mt-1 animate-pulse delay-75">Analyzing Socratic dialogue responses...</p>
+              </>
+            ) : (
+              <>
+                <p className="text-base font-bold text-white tracking-wide animate-pulse">Generating Questions...</p>
+                <p className="text-xs text-brand-purple-light font-medium mt-1 animate-pulse delay-75">Formulating personalized Socratic follow-ups...</p>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -117,28 +337,7 @@ export default function Results() {
     )
   }
 
-  // Fallback calculations for statistics (preserves original visual excellence)
-  const graphNodes = finalGraph?.nodes || []
-  // const graphEdges = finalGraph?.edges || []
-  
-  // Reconstruct user model confidence mapping from rankedGaps to power dashboard graphs
-  const userModel = graphNodes.map(node => {
-    const gap = rankedGaps.find(g => g.concept === node.id)
-    if (gap) {
-      // Priority 10 -> confidence 0.1, Priority 1 -> confidence 0.45
-      const calculatedConf = Math.max(0.05, Math.min(0.49, 0.5 - (gap.priority * 0.045)))
-      return {
-        id: node.id,
-        confidence: calculatedConf,
-        evidence: gap.why || 'Identified gap'
-      }
-    }
-    return {
-      id: node.id,
-      confidence: 0.85,
-      evidence: 'Mastered concept'
-    }
-  })
+  // Statistics variables are now declared at the top of the component
 
   const totalTurns = chatHistory ? chatHistory.filter(m => m.role === 'user').length : 5
   const strongConcepts = userModel.filter(c => c.confidence >= 0.7)
@@ -349,75 +548,15 @@ export default function Results() {
             </div>
             
             {/* Visual Node Network */}
-            <div className="flex-grow flex items-center justify-center border border-dashed border-brand-border/40 rounded-xl bg-brand-dark/30 p-8 my-4 relative overflow-hidden">
-              <div className="relative w-full h-48 flex items-center justify-center">
-                {/* Center Node */}
-                <div className="relative z-10 w-16 h-16 bg-[#0c0e1a] border-2 border-brand-purple rounded-full flex items-center justify-center glow-primary-intense">
-                  <span className="material-symbols-outlined text-brand-purple-light text-2xl">science</span>
-                  <span className="absolute -bottom-6 text-[10px] font-bold text-brand-purple-light whitespace-nowrap uppercase tracking-wider">{finalTopic.slice(0, 15)}</span>
-                </div>
-
-                {/* Nodes surrounding it */}
-                {graphNodes.slice(0, 5).map((node, index) => {
-                  const state = userModel.find(item => item.id === node.id)
-                  const score = state ? state.confidence : 0
-                  const isExplored = state && state.evidence !== 'Initial state'
-
-                  // Coordinates around circular arrangement
-                  const angle = (index * 2 * Math.PI) / Math.min(graphNodes.length, 5)
-                  const radius = 90 // pixels
-                  const x = Math.round(Math.cos(angle) * radius)
-                  const y = Math.round(Math.sin(angle) * radius)
-
-                  let borderClass = 'border-gray-700 text-gray-500'
-                  if (isExplored) {
-                    if (score >= 0.7) {
-                      borderClass = 'border-brand-emerald text-brand-emerald glow-emerald'
-                    } else if (score >= 0.4) {
-                      borderClass = 'border-brand-purple text-brand-purple glow-primary'
-                    } else {
-                      borderClass = 'border-red-500 text-red-500 glow-error animate-pulse'
-                    }
-                  }
-
-                  return (
-                    <React.Fragment key={node.id}>
-                      {/* Node circle */}
-                      <div 
-                        onClick={() => handleNodeSelect(node)}
-                        className={`absolute w-10 h-10 rounded-full bg-[#0c0e1a] border-2 flex items-center justify-center z-10 cursor-pointer hover:scale-110 active:scale-95 transition-all duration-200 ${borderClass}`}
-                        style={{ transform: `translate(${x}px, ${y}px)` }}
-                        title={`${node.label}: ${Math.round(score * 100)}%`}
-                      >
-                        <span className="text-[10px] font-bold truncate max-w-[28px]">{node.label.slice(0, 3)}</span>
-                      </div>
-
-                      {/* Connector line to center using CSS */}
-                      <div 
-                        className="absolute pointer-events-none opacity-20"
-                        style={{
-                          left: '50%',
-                          top: '50%',
-                          width: `${Math.sqrt(x * x + y * y)}px`,
-                          height: '1.5px',
-                          background: score >= 0.7 ? '#10b981' : score >= 0.4 ? '#8b5cf6' : '#ef4444',
-                          transformOrigin: '0 0',
-                          transform: `rotate(${Math.atan2(y, x)}rad)`,
-                          backgroundImage: 'repeating-linear-gradient(90deg, currentColor 0px, currentColor 4px, transparent 4px, transparent 8px)',
-                          backgroundColor: 'transparent',
-                          borderTop: `1.5px dashed ${score >= 0.7 ? '#10b981' : score >= 0.4 ? '#8b5cf6' : '#ef4444'}`
-                        }}
-                      />
-                    </React.Fragment>
-                  )
-                })}
-              </div>
+            <div className="flex-grow flex items-center justify-center border border-dashed border-brand-border/40 rounded-xl bg-brand-dark/30 my-4 relative overflow-hidden min-h-[400px]">
+              <svg ref={svgRef} className="w-full h-full block"></svg>
             </div>
 
             <div className="flex gap-4 items-center justify-center text-[10px] text-gray-400">
-              <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-brand-emerald"></span>Mastered</div>
-              <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-brand-purple"></span>Partial</div>
-              <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>Blind Spot</div>
+              <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-brand-emerald"></span>Mastered (&ge;70%)</div>
+              <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-brand-purple"></span>Partial (40-69%)</div>
+              <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span>Incomplete (1-39%)</div>
+              <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>Unexplored / Gap</div>
             </div>
           </div>
 
@@ -565,9 +704,33 @@ export default function Results() {
           BlindSpot AI
         </div>
         <div className="flex gap-4">
-          <a className="hover:text-brand-purple-light transition-colors" href="#">Privacy</a>
-          <a className="hover:text-brand-purple-light transition-colors" href="#">Terms</a>
-          <a className="hover:text-brand-purple-light transition-colors" href="#">AI Model Ethics</a>
+          <button 
+            onClick={() => setModalContent({ 
+              title: 'Privacy Policy', 
+              text: 'At BlindSpot AI, we prioritize your privacy. All Socratic dialogue messages, self-assessment explanations, and diagnostic maps are stored securely in our database. Your personal data is never sold or used for marketing purposes.' 
+            })} 
+            className="hover:text-brand-purple-light transition-colors cursor-pointer bg-transparent border-none p-0 text-left text-xs font-sans text-gray-500"
+          >
+            Privacy
+          </button>
+          <button 
+            onClick={() => setModalContent({ 
+              title: 'Terms of Service', 
+              text: 'By using BlindSpot AI, you agree to participate in our Socratic assessments for learning purposes. The generated concept graphs and diagnostics are provided "as is" to help guide your studies.' 
+            })} 
+            className="hover:text-brand-purple-light transition-colors cursor-pointer bg-transparent border-none p-0 text-left text-xs font-sans text-gray-500"
+          >
+            Terms
+          </button>
+          <button 
+            onClick={() => setModalContent({ 
+              title: 'AI Model Ethics', 
+              text: 'BlindSpot AI runs on Groq-hosted Llama open weights foundation models. We design our prompts following strict pedagogical guidelines, ensuring AI outputs are educational, supportive, and free of malicious bias.' 
+            })} 
+            className="hover:text-brand-purple-light transition-colors cursor-pointer bg-transparent border-none p-0 text-left text-xs font-sans text-gray-500"
+          >
+            AI Model Ethics
+          </button>
         </div>
         <div>
           © 2026 BlindSpot. Digital Enlightenment.
@@ -684,6 +847,30 @@ export default function Results() {
                   )}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Details Modals (for Privacy, Terms, Ethics) */}
+      {modalContent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+          <div className="bg-[#0B0F19] border border-brand-border/60 rounded-2xl max-w-md w-full p-6 relative shadow-2xl animate-card-in">
+            <button 
+              onClick={() => setModalContent(null)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-lg">close</span>
+            </button>
+            <h3 className="text-lg font-bold text-white mb-3">{modalContent.title}</h3>
+            <p className="text-xs text-gray-300 leading-relaxed mb-4">{modalContent.text}</p>
+            <div className="flex justify-end">
+              <button 
+                onClick={() => setModalContent(null)}
+                className="bg-brand-purple hover:bg-brand-purple-light text-white text-xs font-semibold px-4 py-2 rounded-full cursor-pointer transition-all active:scale-95 glow-primary"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

@@ -225,8 +225,7 @@ No markdown. No backticks. No explanation. JSON only:
     console.error('Unexpected error in Agent 3 (Gap Ranker) endpoint:', error);
     return res.status(500).json({
       error: 'Internal server error in Gap Ranker',
-      message: error.message,
-      stack: error.stack
+      message: error.message
     });
   }
 });

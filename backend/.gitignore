@@ -1,0 +1,4 @@
+server_run.log
+.env
+debug/
+node_modules/

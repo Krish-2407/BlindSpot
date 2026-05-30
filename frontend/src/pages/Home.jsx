@@ -102,6 +102,7 @@ export default function Home() {
   const [error, setError] = useState('')
   const [sessionsHistory, setSessionsHistory] = useState([])
   const [isFlashed, setIsFlashed] = useState(false)
+  const [modalContent, setModalContent] = useState(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -617,6 +618,12 @@ export default function Home() {
 
             {/* Actions/Submit inside form for tighter alignment */}
             <div className="flex flex-col gap-3 mt-1">
+              {explanation.length > 2000 && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-[11px] text-red-400 flex items-start gap-2 animate-pulse">
+                  <i className="fa-solid fa-triangle-exclamation mt-0.5"></i>
+                  <p>Submit is locked: Explanation must be under 2,000 characters. Please compress your explanation or click the "Summarize with AI" button above.</p>
+                </div>
+              )}
               <button
                 type="submit"
                 disabled={loading || !topic.trim() || explanation.length > 2000}
@@ -694,7 +701,7 @@ export default function Home() {
       </main>
 
       {/* Footer Features (Typography scaled) */}
-      <footer className="w-full max-w-[850px] px-4 pb-3 md:pb-6 z-20 flex flex-col items-center mt-2">
+      <footer className="w-full max-w-[850px] px-4 pb-3 md:pb-6 z-20 flex flex-col items-center mt-2 gap-4">
         <div className="w-full bg-brand-card/40 backdrop-blur-xl border border-brand-border/30 rounded-xl px-6 py-3 flex justify-between items-center gap-4 text-[13px] font-medium text-gray-300">
           <div className="flex items-center gap-2">
             <i className="fa-solid fa-lock text-brand-purple-light"></i>
@@ -709,7 +716,66 @@ export default function Home() {
             <span>Dependency Maps</span>
           </div>
         </div>
+
+        <div className="flex justify-between items-center w-full px-4 text-xs text-gray-500">
+          <div className="flex gap-4">
+            <button 
+              onClick={() => setModalContent({ 
+                title: 'Privacy Policy', 
+                text: 'At BlindSpot AI, we prioritize your privacy. All Socratic dialogue messages, self-assessment explanations, and diagnostic maps are stored securely in our database. Your personal data is never sold or used for marketing purposes.' 
+              })} 
+              className="hover:text-brand-purple-light transition-colors cursor-pointer bg-transparent border-none p-0 text-left text-xs font-sans text-gray-500"
+            >
+              Privacy
+            </button>
+            <button 
+              onClick={() => setModalContent({ 
+                title: 'Terms of Service', 
+                text: 'By using BlindSpot AI, you agree to participate in our Socratic assessments for learning purposes. The generated concept graphs and diagnostics are provided "as is" to help guide your studies.' 
+              })} 
+              className="hover:text-brand-purple-light transition-colors cursor-pointer bg-transparent border-none p-0 text-left text-xs font-sans text-gray-500"
+            >
+              Terms
+            </button>
+            <button 
+              onClick={() => setModalContent({ 
+                title: 'AI Model Ethics', 
+                text: 'BlindSpot AI runs on Groq-hosted Llama open weights foundation models. We design our prompts following strict pedagogical guidelines, ensuring AI outputs are educational, supportive, and free of malicious bias.' 
+              })} 
+              className="hover:text-brand-purple-light transition-colors cursor-pointer bg-transparent border-none p-0 text-left text-xs font-sans text-gray-500"
+            >
+              AI Model Ethics
+            </button>
+          </div>
+          <div>
+            © 2026 BlindSpot. Digital Enlightenment.
+          </div>
+        </div>
       </footer>
+
+      {/* Details Modals (for Privacy, Terms, Ethics) */}
+      {modalContent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+          <div className="bg-[#0B0F19] border border-brand-border/60 rounded-2xl max-w-md w-full p-6 relative shadow-2xl animate-card-in">
+            <button 
+              onClick={() => setModalContent(null)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-lg">close</span>
+            </button>
+            <h3 className="text-lg font-bold text-white mb-3">{modalContent.title}</h3>
+            <p className="text-xs text-gray-300 leading-relaxed mb-4">{modalContent.text}</p>
+            <div className="flex justify-end">
+              <button 
+                onClick={() => setModalContent(null)}
+                className="bg-brand-purple hover:bg-brand-purple-light text-white text-xs font-semibold px-4 py-2 rounded-full cursor-pointer transition-all active:scale-95 glow-primary"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

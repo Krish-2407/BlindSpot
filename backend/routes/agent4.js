@@ -234,8 +234,7 @@ No markdown. No backticks. No explanation. JSON only:
     console.error('Unexpected error in Agent 4 (Socratic Output) endpoint:', error);
     return res.status(500).json({
       error: 'Internal server error in Socratic Output',
-      message: error.message,
-      stack: error.stack
+      message: error.message
     });
   }
 });

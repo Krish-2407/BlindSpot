@@ -122,9 +122,22 @@ function generateFallbackGraph(topic) {
   };
 }
 
+function sanitizeInput(text) {
+  if (!text || typeof text !== 'string') return '';
+  return text
+    .replace(/[\[\]\{\}\\]/g, '')
+    .replace(/ignore\s+(?:previous|above|system|all)\s+instructions/gi, '')
+    .replace(/ignore\s+instructions/gi, '')
+    .trim();
+}
+
 router.post('/', async (req, res) => {
   try {
-    const { topic, openingExplanation } = req.body;
+    let { topic, openingExplanation } = req.body;
+
+    // Sanitize input to mitigate prompt injection
+    topic = sanitizeInput(topic);
+    openingExplanation = sanitizeInput(openingExplanation);
 
     // 1. Validate request body fields
     if (!topic || typeof topic !== 'string' || !topic.trim()) {
@@ -298,8 +311,7 @@ Remember: minimum 15 nodes, maximum 25 nodes.`;
   } catch (error) {
     console.error('Agent 1 Error:', error)
     res.status(500).json({ 
-      error: error.message,
-      stack: error.stack 
+      error: error.message
     })
   }
 });
