@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useFlow } from '../context/FlowContext'
 import axios from 'axios'
@@ -6,13 +6,51 @@ import axios from 'axios'
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
 
 export default function Home() {
-  const { setActiveTopic, setSessionId, setMasterGraph, setChatHistory, setActiveScreen } = useFlow()
+  const { setActiveTopic, setSessionId, setMasterGraph, setChatHistory, setActiveScreen, resumeSession } = useFlow()
   const [topic, setTopic] = useState('')
   const [explanation, setExplanation] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingStep, setLoadingStep] = useState('') // "mapping" or "diagnosing"
   const [error, setError] = useState('')
+  const [sessionsHistory, setSessionsHistory] = useState([])
   const navigate = useNavigate()
+
+  useEffect(() => {
+    try {
+      const historyJson = localStorage.getItem('blindspot_sessions_history');
+      if (historyJson) {
+        setSessionsHistory(JSON.parse(historyJson));
+      }
+    } catch (err) {
+      console.warn('Failed to load sessions history:', err);
+    }
+  }, []);
+
+  const handleResume = async (id) => {
+    setLoading(true);
+    setError('');
+    setLoadingStep('diagnosing');
+    try {
+      const response = await axios.get(`${API_URL}/api/session/${id}`, { timeout: 30000 });
+      const sessionData = response.data;
+      
+      resumeSession(sessionData);
+      
+      if (sessionData.questions || sessionData.rankedGaps) {
+        setActiveScreen('results');
+        navigate('/results');
+      } else {
+        setActiveScreen('conversation');
+        navigate('/conversation');
+      }
+    } catch (err) {
+      console.error(err);
+      setError('Failed to resume session. Please try again.');
+    } finally {
+      setLoading(false);
+      setLoadingStep('');
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -314,6 +352,44 @@ export default function Home() {
               </div>
             </div>
           </form>
+
+          {/* Recent Sessions History Section */}
+          {sessionsHistory.length > 0 && (
+            <div className="w-full mt-6 bg-brand-card/30 backdrop-blur-xl border border-brand-border/30 rounded-2xl p-5 shadow-lg relative z-40">
+              <h3 className="text-xs font-bold tracking-widest uppercase text-gray-400 mb-3 ml-0.5">
+                Resume a Recent Session
+              </h3>
+              <div className="flex flex-col gap-2.5 max-h-[220px] overflow-y-auto pr-1">
+                {sessionsHistory.map((item) => (
+                  <button
+                    key={item.sessionId}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => handleResume(item.sessionId)}
+                    className="group relative flex items-center justify-between p-3 rounded-xl border border-brand-border/35 bg-brand-card/40 text-left transition-all hover:border-brand-purple/40 hover:bg-brand-card/75 disabled:opacity-50"
+                  >
+                    <div className="flex flex-col truncate pr-2">
+                      <span className="text-sm font-bold text-white truncate max-w-[340px]">
+                        {item.topic}
+                      </span>
+                      <span className="text-[10px] text-gray-500 font-semibold mt-0.5">
+                        {new Date(item.timestamp).toLocaleDateString(undefined, {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1 text-[11px] font-bold text-brand-purple-light opacity-80 group-hover:opacity-100 transition-opacity">
+                      <span>Resume</span>
+                      <i className="fa-solid fa-chevron-right text-[9px] transition-transform group-hover:translate-x-0.5"></i>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </main>
 

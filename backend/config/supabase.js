@@ -67,6 +67,18 @@ class SupabaseMock {
         const data = results[0] || null;
         return { data, error: data ? null : new Error("Not found") };
       },
+      maybeSingle: () => {
+        const results = list.filter(item => !filterField || item[filterField] === filterVal);
+        if (orderField) {
+          results.sort((a, b) => {
+            if (a[orderField] < b[orderField]) return orderAsc ? -1 : 1;
+            if (a[orderField] > b[orderField]) return orderAsc ? 1 : -1;
+            return 0;
+          });
+        }
+        const data = results[0] || null;
+        return { data, error: null };
+      },
       then: (resolve, reject) => {
         if (isInsert) {
           resolve({ data: insertedItems, error: null });
