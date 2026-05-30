@@ -116,44 +116,176 @@ export default function Results() {
       
     svg.selectAll('*').remove()
 
-    // Add arrow markers for links
-    svg.append('defs').append('marker')
-      .attr('id', 'arrow')
-      .attr('viewBox', '0 -5 10 10')
-      .attr('refX', 24)
-      .attr('refY', 0)
-      .attr('markerWidth', 6)
-      .attr('markerHeight', 6)
-      .attr('orient', 'auto')
-      .append('path')
-      .attr('d', 'M0,-5L10,0L0,5')
-      .attr('fill', '#475569')
+    // 1. Create the virtual root node representing the main topic
+    const rootNode = {
+      id: 'root-topic-center',
+      label: finalTopic,
+      description: `Overall topic: ${finalTopic}`,
+      isRootTopic: true,
+      x: width / 2,
+      y: height / 2,
+      fx: width / 2,
+      fy: height / 2
+    }
 
-    // Create copies of nodes/links
-    const nodes = finalGraph.nodes.map(d => ({ ...d }))
-    const links = (finalGraph.edges || []).map(d => ({
-      source: d.from,
-      target: d.to
-    })).filter(l => 
-      nodes.some(n => n.id === l.source) && nodes.some(n => n.id === l.target)
-    )
+    // 2. Identify the Category nodes (Level 1)
+    const inDegrees = {}
+    const outDegrees = {}
+    finalGraph.nodes.forEach(n => {
+      inDegrees[n.id] = 0
+      outDegrees[n.id] = 0
+    })
+    
+    ;(finalGraph.edges || []).forEach(e => {
+      if (inDegrees[e.to] !== undefined) inDegrees[e.to]++
+      if (outDegrees[e.from] !== undefined) outDegrees[e.from]++
+    })
+
+    // Sort to choose the best category candidates: prerequisites (low in-degree) with high out-degree
+    const sortedCandidates = [...finalGraph.nodes].sort((a, b) => {
+      const scoreA = (outDegrees[a.id] || 0) - (inDegrees[a.id] || 0) * 2
+      const scoreB = (outDegrees[b.id] || 0) - (inDegrees[b.id] || 0) * 2
+      return scoreB - scoreA
+    })
+
+    // Select up to 4 Category nodes
+    const categoryIds = sortedCandidates.slice(0, 4).map(n => n.id)
+
+    // Build parent assignments and leaf groups
+    const leafNodes = finalGraph.nodes.filter(n => !categoryIds.includes(n.id))
+    const parentMap = {}
+    const leafGroups = {}
+    categoryIds.forEach(id => { leafGroups[id] = [] })
+
+    // Assign leaf nodes to parent categories
+    leafNodes.forEach(leaf => {
+      let bestCategory = null
+      
+      // Look for a direct incoming dependency from a category node
+      categoryIds.forEach(catId => {
+        const directLink = (finalGraph.edges || []).some(e => e.from === catId && e.to === leaf.id)
+        if (directLink) {
+          bestCategory = catId
+        }
+      })
+
+      // If no direct link, check path from any direct predecessor
+      if (!bestCategory) {
+        const incomingEdges = (finalGraph.edges || []).filter(e => e.to === leaf.id)
+        if (incomingEdges.length > 0) {
+          const parentId = incomingEdges[0].from
+          if (categoryIds.includes(parentId)) {
+            bestCategory = parentId
+          }
+        }
+      }
+
+      parentMap[leaf.id] = bestCategory
+    })
+
+    // Distribute remaining parentless leaf nodes to balance the clusters
+    leafNodes.forEach(leaf => {
+      if (!parentMap[leaf.id]) {
+        let minCat = categoryIds[0]
+        let minCount = Infinity
+        categoryIds.forEach(catId => {
+          if (leafGroups[catId].length < minCount) {
+            minCount = leafGroups[catId].length
+            minCat = catId
+          }
+        })
+        parentMap[leaf.id] = minCat
+      }
+      leafGroups[parentMap[leaf.id]].push(leaf.id)
+    })
+
+    // Map final node objects with category/leaf attributes
+    const nodes = [
+      rootNode,
+      ...finalGraph.nodes.map(n => ({
+        ...n,
+        isRootTopic: false,
+        isCategory: categoryIds.includes(n.id)
+      }))
+    ]
+
+    // Construct the connection links
+    const links = []
+    categoryIds.forEach(catId => {
+      links.push({
+        source: 'root-topic-center',
+        target: catId,
+        isRootLink: true
+      })
+    })
+
+    leafNodes.forEach(leaf => {
+      const catId = parentMap[leaf.id]
+      if (catId) {
+        links.push({
+          source: catId,
+          target: leaf.id,
+          isLeafLink: true
+        })
+      }
+    })
+
+    // Set quadrant-based target x/y positions for simulation constraints
+    function assignTargetPositions(nodesList, currentWidth) {
+      nodesList.forEach(n => {
+        if (n.isRootTopic) {
+          n.targetX = currentWidth / 2
+          n.targetY = height / 2
+          n.fx = currentWidth / 2
+          n.fy = height / 2
+        } else if (n.isCategory) {
+          const idx = categoryIds.indexOf(n.id)
+          const angles = [-Math.PI / 4, -3 * Math.PI / 4, 3 * Math.PI / 4, Math.PI / 4]
+          const radius = 110
+          n.targetX = currentWidth / 2 + Math.cos(angles[idx]) * radius
+          n.targetY = height / 2 + Math.sin(angles[idx]) * radius
+        } else {
+          const catId = parentMap[n.id]
+          const idx = categoryIds.indexOf(catId)
+          const angles = [-Math.PI / 4, -3 * Math.PI / 4, 3 * Math.PI / 4, Math.PI / 4]
+          
+          const leafIndex = leafGroups[catId].indexOf(n.id)
+          const leafCount = leafGroups[catId].length
+          const baseAngle = angles[idx]
+          
+          const spread = Math.PI / 3 // 60-degree radial spread
+          const angleOffset = leafCount > 1 
+            ? (leafIndex / (leafCount - 1) - 0.5) * spread
+            : 0
+            
+          const leafAngle = baseAngle + angleOffset
+          const radius = 200
+          n.targetX = currentWidth / 2 + Math.cos(leafAngle) * radius
+          n.targetY = height / 2 + Math.sin(leafAngle) * radius
+        }
+      })
+    }
+
+    assignTargetPositions(nodes, width)
 
     const simulation = d3.forceSimulation(nodes)
-      .force('link', d3.forceLink(links).id(d => d.id).distance(120))
-      .force('charge', d3.forceManyBody().strength(-150))
+      .force('link', d3.forceLink(links).id(d => d.id).distance(d => d.isRootLink ? 110 : 80).strength(0.8))
+      .force('charge', d3.forceManyBody().strength(d => d.isRootTopic ? -350 : d.isCategory ? -120 : -50))
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(32))
+      .force('collision', d3.forceCollide().radius(d => d.isRootTopic ? 40 : d.isCategory ? 26 : 18))
+      .force('x', d3.forceX(d => d.targetX).strength(d => d.isRootTopic ? 1.5 : d.isCategory ? 0.7 : 0.4))
+      .force('y', d3.forceY(d => d.targetY).strength(d => d.isRootTopic ? 1.5 : d.isCategory ? 0.7 : 0.4))
 
-    // Draw links
+    // Draw lines/links
     const link = svg.append('g')
       .selectAll('line')
       .data(links)
       .enter()
       .append('line')
-      .attr('stroke', '#334155')
-      .attr('stroke-opacity', 0.8)
-      .attr('stroke-width', 1.5)
-      .attr('marker-end', 'url(#arrow)')
+      .attr('stroke', d => d.isRootLink ? '#8b5cf6' : '#475569')
+      .attr('stroke-opacity', d => d.isRootLink ? 0.9 : 0.6)
+      .attr('stroke-width', d => d.isRootLink ? 3.5 : 1.5)
+      .attr('stroke-dasharray', d => d.isLeafLink ? '3,3' : null)
 
     // Draw nodes groups
     const node = svg.append('g')
@@ -161,8 +293,9 @@ export default function Results() {
       .data(nodes)
       .enter()
       .append('g')
-      .attr('class', 'cursor-pointer')
+      .attr('class', d => d.isRootTopic ? 'cursor-default' : 'cursor-pointer')
       .on('click', (event, d) => {
+        if (d.isRootTopic) return
         const origNode = finalGraph.nodes.find(n => n.id === d.id)
         if (origNode) {
           handleNodeSelect(origNode)
@@ -174,56 +307,65 @@ export default function Results() {
         .on('end', dragended)
       )
 
-    // Node circles with styling dynamic to confidence scores
+    // Node circles with styling dynamic to depth level
     node.append('circle')
-      .attr('r', 18)
-      .attr('fill', '#090d16')
+      .attr('r', d => d.isRootTopic ? 32 : d.isCategory ? 22 : 15)
+      .attr('fill', d => d.isRootTopic ? '#0f172a' : '#090d16')
       .attr('stroke', d => {
+        if (d.isRootTopic) return '#8b5cf6'
         const state = userModel.find(item => item.id === d.id)
         const score = state ? state.confidence : 0
-        const isExplored = state && state.evidence !== 'Initial state'
-        if (!isExplored) return '#ef4444' // Unexplored Gap (pulsing red)
+        const isExplored = state && state.evidence !== 'Unexplored concept'
+        if (!isExplored) return '#ef4444' // Unexplored Gap
         if (score >= 0.7) return '#10b981' // Mastered
         if (score >= 0.4) return '#8b5cf6' // Partial
         return '#f59e0b' // Incomplete
       })
-      .attr('stroke-width', 2.5)
+      .attr('stroke-width', d => d.isRootTopic ? 4 : d.isCategory ? 3 : 2)
       .attr('class', d => {
+        if (d.isRootTopic) return ''
         const state = userModel.find(item => item.id === d.id)
         const score = state ? state.confidence : 0
-        const isExplored = state && state.evidence !== 'Initial state'
+        const isExplored = state && state.evidence !== 'Unexplored concept'
         if (!isExplored || score < 0.4) {
           return 'animate-pulse'
         }
         return ''
       })
       .style('filter', d => {
+        if (d.isRootTopic) return 'drop-shadow(0 0 10px rgba(139,92,246,0.6))'
         const state = userModel.find(item => item.id === d.id)
         const score = state ? state.confidence : 0
-        const isExplored = state && state.evidence !== 'Initial state'
+        const isExplored = state && state.evidence !== 'Unexplored concept'
         if (!isExplored) return 'drop-shadow(0 0 6px rgba(239,68,68,0.5))'
         if (score >= 0.7) return 'drop-shadow(0 0 6px rgba(16,185,129,0.5))'
         if (score >= 0.4) return 'drop-shadow(0 0 6px rgba(139,92,246,0.5))'
         return 'drop-shadow(0 0 6px rgba(245,158,11,0.5))'
       })
 
-    // Labels on nodes
+    // Short acronym label on nodes (in uppercase)
     node.append('text')
       .attr('text-anchor', 'middle')
       .attr('dy', '.3em')
       .attr('fill', '#dae2fd')
-      .attr('font-size', '10px')
-      .attr('font-weight', 'bold')
-      .text(d => d.label.slice(0, 3).toUpperCase())
+      .attr('font-size', d => d.isRootTopic ? '11px' : d.isCategory ? '10px' : '9px')
+      .attr('font-weight', 'black')
+      .text(d => {
+        if (d.isRootTopic) return d.label.slice(0, 3).toUpperCase()
+        return d.label.slice(0, 3).toUpperCase()
+      })
 
     // Node label below node
     node.append('text')
       .attr('text-anchor', 'middle')
-      .attr('dy', '2.5em')
-      .attr('fill', '#94a3b8')
-      .attr('font-size', '9px')
-      .attr('font-weight', '500')
-      .text(d => d.label.length > 15 ? d.label.slice(0, 12) + '...' : d.label)
+      .attr('dy', d => d.isRootTopic ? '3.8em' : d.isCategory ? '3.5em' : '2.8em')
+      .attr('fill', d => d.isRootTopic ? '#e2e8f0' : d.isCategory ? '#cbd5e1' : '#94a3b8')
+      .attr('font-size', d => d.isRootTopic ? '10px' : d.isCategory ? '9px' : '8px')
+      .attr('font-weight', d => d.isRootTopic ? 'bold' : '500')
+      .text(d => {
+        if (d.isRootTopic) return d.label.length > 20 ? d.label.slice(0, 17) + '...' : d.label
+        return d.label.length > 15 ? d.label.slice(0, 12) + '...' : d.label
+      })
 
     simulation.on('tick', () => {
       link
@@ -249,15 +391,20 @@ export default function Results() {
 
     function dragended(event, d) {
       if (!event.active) simulation.alphaTarget(0)
-      d.fx = null
-      d.fy = null
+      if (!d.isRootTopic) {
+        d.fx = null
+        d.fy = null
+      }
     }
 
     const handleResize = () => {
       if (!svgRef.current) return
       const newWidth = svgRef.current.parentElement.clientWidth
       svg.attr('viewBox', `0 0 ${newWidth} ${height}`)
+      assignTargetPositions(nodes, newWidth)
       simulation.force('center', d3.forceCenter(newWidth / 2, height / 2))
+      simulation.force('x', d3.forceX(d => d.targetX).strength(d => d.isRootTopic ? 1.5 : d.isCategory ? 0.7 : 0.4))
+      simulation.force('y', d3.forceY(d => d.targetY).strength(d => d.isRootTopic ? 1.5 : d.isCategory ? 0.7 : 0.4))
       simulation.alpha(0.3).restart()
     }
 
