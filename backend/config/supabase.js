@@ -1,19 +1,57 @@
 const { createClient } = require('@supabase/supabase-js');
+const fs = require('fs');
+const path = require('path');
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabaseKey = supabaseServiceRoleKey || supabaseAnonKey;
 
+const dbFilePath = path.join(__dirname, '../debug/mock_db.json');
+
 // Mock database for local testing when service keys are missing or tables are locked
 class SupabaseMock {
   constructor() {
-    this.sessions = [];
-    this.conversations = [];
-    this.results = [];
+    this.load();
+  }
+
+  load() {
+    try {
+      if (fs.existsSync(dbFilePath)) {
+        const data = JSON.parse(fs.readFileSync(dbFilePath, 'utf8'));
+        this.sessions = data.sessions || [];
+        this.conversations = data.conversations || [];
+        this.results = data.results || [];
+      } else {
+        this.sessions = [];
+        this.conversations = [];
+        this.results = [];
+      }
+    } catch (err) {
+      this.sessions = [];
+      this.conversations = [];
+      this.results = [];
+    }
+  }
+
+  save() {
+    try {
+      const dir = path.dirname(dbFilePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(dbFilePath, JSON.stringify({
+        sessions: this.sessions,
+        conversations: this.conversations,
+        results: this.results
+      }, null, 2), 'utf8');
+    } catch (err) {
+      console.warn('Failed to save mock database file:', err.message);
+    }
   }
 
   from(table) {
+    this.load();
     const list = this[table] || [];
     let filterField = null;
     let filterVal = null;
@@ -32,6 +70,7 @@ class SupabaseMock {
           list.push(newItem);
           return newItem;
         });
+        this.save();
         return builder;
       },
       update: (obj) => {
@@ -89,6 +128,7 @@ class SupabaseMock {
           itemsToUpdate.forEach(item => {
             Object.assign(item, updateObj);
           });
+          this.save();
           resolve({ data: itemsToUpdate, error: null });
           return;
         }
