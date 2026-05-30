@@ -71,9 +71,18 @@ router.post('/', async (req, res) => {
       description: node.description
     }));
 
+    // opening explanation may be saved as a top-level column or embedded
+    // inside the saved expert_graph JSON (legacy/safe storage). Try both.
+    let openingExplanation = '';
+    if (sessionData.opening_explanation) {
+      openingExplanation = sessionData.opening_explanation;
+    } else if (sessionData.expert_graph && sessionData.expert_graph.opening_explanation) {
+      openingExplanation = sessionData.expert_graph.opening_explanation;
+    }
     recordAgentEvent('agent2', 'request_received', {
       sessionId,
       topic: sessionData.topic,
+      openingExplanation,
       userMessage: userMessage.trim(),
       expertGraphNodesCount: conceptsList.length
     });
@@ -102,6 +111,14 @@ router.post('/', async (req, res) => {
     } else {
       // Initialize with messages from request body (if any) or empty array
       history = Array.isArray(messages) ? [...messages] : [];
+
+      // If the user provided an opening explanation when creating the session,
+      // include it as an initial user message so the Socratic tutor knows what
+      // the user already stated and will avoid re-asking about those concepts.
+      if (openingExplanation && !history.find(m => m.content === openingExplanation)) {
+        history.unshift({ role: 'user', content: openingExplanation });
+      }
+
       // Initialize user model with all concepts set to confidence 0.0
       userModel = conceptsList.map(c => ({
         id: c.id,

@@ -136,11 +136,14 @@ export default function Conversation() {
   if (!activeTopic) return null
 
   // The auto-bootstrap user message starts the interview, but it is not an answer.
+  // Count completed rounds (user answer + AI reply pairs) excluding the bootstrap exchange.
   const userMessages = chatHistory.filter(m => m.role === 'user')
-  const totalTurns = Math.max(
-    0,
-    userMessages.length - (userMessages[0]?.content === bootstrapMessage ? 1 : 0)
-  )
+  const assistantMessages = chatHistory.filter(m => m.role === 'assistant')
+  const hasBootstrap = userMessages[0]?.content === bootstrapMessage
+  const userAnswerCount = Math.max(0, userMessages.length - (hasBootstrap ? 1 : 0))
+  const assistantReplyCount = Math.max(0, assistantMessages.length - (hasBootstrap ? 1 : 0))
+  // A turn is only "complete" when the AI has replied to the user's answer
+  const totalTurns = Math.min(userAnswerCount, assistantReplyCount)
   const maxTurns = 5
 
   const exploredConcepts = userModel.filter(c => c.confidence > 0 || c.evidence !== 'Initial state')

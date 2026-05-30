@@ -246,12 +246,18 @@ Remember: minimum 15 nodes, maximum 25 nodes.`;
     }
 
     // 5. Save parsed output to Supabase sessions table
+    // Embed the opening explanation into the expertGraph payload so we don't
+    // require an immediate DB schema migration for a new column.
+    const graphToSave = Object.assign({}, expertGraph, {
+      opening_explanation: openingExplanation || ''
+    });
+
     const { data, error } = await supabase
       .from('sessions')
       .insert([
         {
           topic: topic.trim(),
-          expert_graph: expertGraph
+          expert_graph: graphToSave
         }
       ])
       .select();
