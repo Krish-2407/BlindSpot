@@ -72,6 +72,27 @@ function transliterateDevanagari(text) {
     .replace(/ae/g, 'e');
 }
 
+const DEMO_PROFILES = [
+  {
+    name: 'React Hooks Basics',
+    topic: 'React Hooks',
+    explanation: 'I understand that useState allows us to add state to functional components, and useEffect is for side effects. But I always get confused about dependency arrays, stale closures inside callbacks, and why we shouldn\'t call hooks conditionally.',
+    colorClass: 'border-cyan-500/30 text-cyan-400 hover:border-cyan-400 hover:shadow-[0_0_12px_rgba(6,182,212,0.35)] hover:bg-cyan-950/20'
+  },
+  {
+    name: 'Quantum Mechanics Intro',
+    topic: 'Quantum Mechanics',
+    explanation: 'I understand wave-particle duality and the Schrodinger equation, but quantum tunneling, superposition vs mixed states, and Bell\'s inequality are things I struggle to explain or visualize.',
+    colorClass: 'border-purple-500/30 text-purple-400 hover:border-purple-400 hover:shadow-[0_0_12px_rgba(168,85,247,0.35)] hover:bg-purple-950/20'
+  },
+  {
+    name: 'Git Internals',
+    topic: 'Git Internals',
+    explanation: 'I know git add and git commit, and how branches are pointers. But I do not understand how git represents tree and blob objects internally, how commits reference them, and how git resolves conflicts during a merge on a low level.',
+    colorClass: 'border-orange-500/30 text-orange-400 hover:border-orange-400 hover:shadow-[0_0_12px_rgba(249,115,22,0.35)] hover:bg-orange-950/20'
+  }
+]
+
 export default function Home() {
   const { setActiveTopic, setSessionId, setMasterGraph, setChatHistory, setActiveScreen, resumeSession } = useFlow()
   const [topic, setTopic] = useState('')
@@ -80,6 +101,7 @@ export default function Home() {
   const [loadingStep, setLoadingStep] = useState('') // "mapping" or "diagnosing"
   const [error, setError] = useState('')
   const [sessionsHistory, setSessionsHistory] = useState([])
+  const [isFlashed, setIsFlashed] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -180,7 +202,7 @@ export default function Home() {
       return () => {
         try {
           rec.stop();
-        } catch (e) {
+        } catch {
           // ignore if already stopped or not active
         }
       };
@@ -338,6 +360,14 @@ export default function Home() {
           border: 1.5px solid rgba(253, 224, 71, 0.9);
           animation: node-pulse 3s ease-in-out infinite;
         }
+        
+        @keyframes input-flash {
+          0%, 100% { border-color: rgba(139, 92, 246, 0.15); box-shadow: none; }
+          50% { border-color: rgba(168, 85, 247, 0.85); box-shadow: 0 0 15px rgba(168, 85, 247, 0.4); }
+        }
+        .animate-flash {
+          animation: input-flash 0.8s ease-in-out;
+        }
       `}} />
 
       {/* Background layer */}
@@ -459,7 +489,7 @@ export default function Home() {
             {/* Topic Input */}
             <div>
               <label className="block text-[12px] font-bold text-gray-300 uppercase tracking-widest mb-1.5 ml-0.5">Topic</label>
-              <div className="relative glass-input rounded-xl flex items-center p-1">
+              <div className={`relative glass-input rounded-xl flex items-center p-1 transition-all duration-200 ${isFlashed ? 'animate-flash' : ''}`}>
                 <div className="pl-3 pr-2 text-gray-500">
                   <i className="fa-solid fa-magnifying-glass text-xs"></i>
                 </div>
@@ -497,7 +527,7 @@ export default function Home() {
                   </span>
                 </div>
               </div>
-              <div className="relative glass-input rounded-xl p-1 flex flex-col">
+              <div className={`relative glass-input rounded-xl p-1 flex flex-col transition-all duration-200 ${isFlashed ? 'animate-flash' : ''}`}>
                 <textarea 
                   rows="4"
                   maxLength={10000}
@@ -553,6 +583,36 @@ export default function Home() {
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* 1-Click Demo Profiles */}
+            <div className="flex flex-col gap-2.5 mt-1">
+              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest ml-0.5">
+                Quick Demo Profiles
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {DEMO_PROFILES.map((profile, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => {
+                      if (isListening && recognition) {
+                        recognition.stop();
+                        setIsListening(false);
+                      }
+                      setInterimText('');
+                      setTopic(profile.topic);
+                      setExplanation(profile.explanation);
+                      setIsFlashed(true);
+                      setTimeout(() => setIsFlashed(false), 800);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all duration-200 active:scale-95 whitespace-nowrap cursor-pointer ${profile.colorClass} disabled:opacity-50 disabled:pointer-events-none`}
+                  >
+                    {profile.name}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Actions/Submit inside form for tighter alignment */}

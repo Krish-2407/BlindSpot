@@ -16,6 +16,8 @@ export default function Results() {
   const [rankedGaps, setRankedGaps] = useState([])
   const [questions, setQuestions] = useState([])
   const [learningPath, setLearningPath] = useState([])
+  const [selectedNode, setSelectedNode] = useState(null)
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
 
   const fetchResultsData = async () => {
     if (!sessionId) {
@@ -117,7 +119,7 @@ export default function Results() {
 
   // Fallback calculations for statistics (preserves original visual excellence)
   const graphNodes = finalGraph?.nodes || []
-  const graphEdges = finalGraph?.edges || []
+  // const graphEdges = finalGraph?.edges || []
   
   // Reconstruct user model confidence mapping from rankedGaps to power dashboard graphs
   const userModel = graphNodes.map(node => {
@@ -140,7 +142,7 @@ export default function Results() {
 
   const totalTurns = chatHistory ? chatHistory.filter(m => m.role === 'user').length : 5
   const strongConcepts = userModel.filter(c => c.confidence >= 0.7)
-  const weakConcepts = userModel.filter(c => c.confidence > 0.0 && c.confidence < 0.7)
+  // const weakConcepts = userModel.filter(c => c.confidence > 0.0 && c.confidence < 0.7)
   const blindSpots = userModel.filter(c => c.confidence < 0.4)
 
   // Overall Score
@@ -162,6 +164,31 @@ export default function Results() {
   const handleReset = () => {
     resetFlow()
     navigate('/')
+  }
+
+  const handleNodeSelect = (node) => {
+    const modelState = userModel.find(item => item.id === node.id)
+    const confidence = modelState ? modelState.confidence : 0
+    const evidence = modelState ? modelState.evidence : 'No diagnostics available'
+
+    const matchedQuestion = questions.find(q => q.concept === node.id || q.gap === node.id || (q.label && q.label.toLowerCase() === node.label.toLowerCase()))
+
+    const gapInfo = rankedGaps.find(g => g.concept === node.id)
+    const priority = gapInfo ? gapInfo.priority : null
+    
+    const pathInfo = learningPath.find(p => p.concept === node.id || (p.label && p.label.toLowerCase() === node.label.toLowerCase()))
+    const sequenceOrder = pathInfo ? pathInfo.order : null
+
+    setSelectedNode({
+      ...node,
+      confidence,
+      evidence,
+      priority,
+      sequenceOrder,
+      question: matchedQuestion ? matchedQuestion.question : null,
+      questionWhy: matchedQuestion ? (matchedQuestion.why_this_matters || matchedQuestion.intent) : null
+    })
+    setIsDrawerOpen(true)
   }
 
   return (
@@ -195,6 +222,9 @@ export default function Results() {
         .animate-card-in {
           opacity: 0;
           animation: fadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .drawer-transition {
+          transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
         }
       `}} />
 
@@ -354,7 +384,8 @@ export default function Results() {
                     <React.Fragment key={node.id}>
                       {/* Node circle */}
                       <div 
-                        className={`absolute w-10 h-10 rounded-full bg-[#0c0e1a] border-2 flex items-center justify-center z-10 ${borderClass}`}
+                        onClick={() => handleNodeSelect(node)}
+                        className={`absolute w-10 h-10 rounded-full bg-[#0c0e1a] border-2 flex items-center justify-center z-10 cursor-pointer hover:scale-110 active:scale-95 transition-all duration-200 ${borderClass}`}
                         style={{ transform: `translate(${x}px, ${y}px)` }}
                         title={`${node.label}: ${Math.round(score * 100)}%`}
                       >
@@ -542,6 +573,121 @@ export default function Results() {
           © 2026 BlindSpot. Digital Enlightenment.
         </div>
       </footer>
+
+      {/* Detail Slide-out Drawer */}
+      {selectedNode && (
+        <div className={`fixed inset-0 z-50 flex justify-end transition-opacity duration-300 ${isDrawerOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+          {/* Backdrop Overlay */}
+          <div 
+            onClick={() => setIsDrawerOpen(false)}
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm cursor-pointer"
+          />
+          
+          {/* Drawer Container */}
+          <div 
+            className={`relative z-10 w-full sm:w-[420px] h-full bg-[#0B0F19]/95 backdrop-blur-2xl border-l border-brand-border/40 p-6 flex flex-col gap-6 shadow-[0_0_50px_rgba(0,0,0,0.8)] drawer-transition transform ${
+              isDrawerOpen ? 'translate-x-0' : 'translate-x-full'
+            }`}
+          >
+            {/* Close Button */}
+            <button 
+              onClick={() => setIsDrawerOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-lg">close</span>
+            </button>
+
+            {/* Drawer Header */}
+            <div className="pr-8">
+              <span className="text-[10px] font-bold text-brand-purple-light uppercase tracking-widest">Concept Diagnostics</span>
+              <h2 className="text-xl font-bold text-white mt-1 pr-4">{selectedNode.label}</h2>
+            </div>
+
+            <div className="flex flex-col gap-5 overflow-y-auto pr-1 pb-6">
+              {/* Status Badge */}
+              <div>
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Understanding Level</div>
+                {(() => {
+                  const conf = selectedNode.confidence;
+                  let badgeText = 'Mastered';
+                  let badgeColor = 'text-brand-emerald border-brand-emerald/20 bg-brand-emerald/10 glow-emerald';
+                  if (conf < 0.4) {
+                    badgeText = 'Blind Spot';
+                    badgeColor = 'text-red-500 border-red-500/20 bg-red-500/10 shadow-glow-error animate-pulse';
+                  } else if (conf < 0.7) {
+                    badgeText = 'Partial';
+                    badgeColor = 'text-brand-purple border-brand-purple/20 bg-brand-purple/10 glow-primary';
+                  }
+                  return (
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-bold ${badgeColor}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${conf < 0.4 ? 'bg-red-500' : conf < 0.7 ? 'bg-brand-purple' : 'bg-brand-emerald'}`}></span>
+                      {badgeText} ({Math.round(conf * 100)}%)
+                    </span>
+                  );
+                })()}
+              </div>
+
+              {/* Unlock Score */}
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Unlock Score</span>
+                  <span className="text-xs font-bold text-brand-purple-light">{selectedNode.unlock_score || selectedNode.priority || 0} / 10</span>
+                </div>
+                <div className="w-full h-2.5 bg-black/40 rounded-full overflow-hidden border border-brand-border/20">
+                  <div 
+                    className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-purple-light transition-all duration-500" 
+                    style={{ width: `${((selectedNode.unlock_score || selectedNode.priority || 0) / 10) * 100}%` }}
+                  ></div>
+                </div>
+                <span className="text-[10px] text-gray-500 mt-1 block">Higher scores indicate concept dependencies that unlock multiple downstream ideas.</span>
+              </div>
+
+              {/* Description */}
+              {selectedNode.description && (
+                <div className="bg-brand-card/40 border border-brand-border/30 rounded-xl p-3.5">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Concept Description</div>
+                  <p className="text-xs text-gray-300 leading-relaxed">{selectedNode.description}</p>
+                </div>
+              )}
+
+              {/* Diagnostic Evidence */}
+              <div className="bg-[#0b0f19] border border-brand-border/40 rounded-xl p-3.5">
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">AI Diagnostic Evidence</div>
+                <p className="text-xs text-gray-300 leading-relaxed italic">"{selectedNode.evidence}"</p>
+              </div>
+
+              {/* Learning Path Topological Order */}
+              {selectedNode.sequenceOrder !== null && (
+                <div className="flex items-center gap-3 bg-brand-purple/10 border border-brand-purple/20 rounded-xl p-3.5">
+                  <div className="w-8 h-8 rounded-full bg-brand-purple text-white flex items-center justify-center text-xs font-bold flex-shrink-0 glow-primary">
+                    {selectedNode.sequenceOrder}
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-bold text-brand-purple-light uppercase tracking-widest">Learning Path Order</div>
+                    <p className="text-xs text-gray-300">This concept is step #{selectedNode.sequenceOrder} in your study plan.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Socratic Practice Question */}
+              {selectedNode.question && (
+                <div className="bg-gradient-to-br from-brand-purple/20 to-indigo-950/20 border border-brand-purple/40 rounded-xl p-4 flex flex-col gap-2.5">
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-brand-purple-light text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>help</span>
+                    <span className="text-[10px] font-bold text-brand-purple-light uppercase tracking-widest">Socratic practice question</span>
+                  </div>
+                  <p className="text-xs text-white font-bold leading-relaxed">{selectedNode.question}</p>
+                  {selectedNode.questionWhy && (
+                    <div className="text-[10.5px] text-gray-400">
+                      <span className="font-bold text-brand-purple-light">Core Intent:</span> {selectedNode.questionWhy}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

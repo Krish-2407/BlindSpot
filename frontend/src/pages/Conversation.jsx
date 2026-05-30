@@ -11,6 +11,8 @@ export default function Conversation() {
   const [inputText, setInputText] = useState('')
   const [loading, setLoading] = useState(false)
   const [userModel, setUserModel] = useState([])
+  const [selectedNode, setSelectedNode] = useState(null)
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const messagesEndRef = useRef(null)
   const bootstrapMessage = activeTopic ? `I want to evaluate my understanding of ${activeTopic}.` : ''
 
@@ -133,6 +135,19 @@ export default function Conversation() {
     navigate('/results')
   }
 
+  const handleNodeSelect = (node) => {
+    const modelState = userModel.find(item => item.id === node.id)
+    const confidence = modelState ? modelState.confidence : 0
+    const evidence = modelState ? modelState.evidence : 'No diagnostics available yet'
+
+    setSelectedNode({
+      ...node,
+      confidence,
+      evidence
+    })
+    setIsDrawerOpen(true)
+  }
+
   if (!activeTopic) return null
 
   // The auto-bootstrap user message starts the interview, but it is not an answer.
@@ -172,6 +187,9 @@ export default function Conversation() {
         .glow-success { box-shadow: 0 0 15px rgba(16, 185, 129, 0.3); }
         .glow-warning { box-shadow: 0 0 15px rgba(245, 158, 11, 0.3); }
         .glow-error { box-shadow: 0 0 15px rgba(239, 68, 68, 0.3); }
+        .drawer-transition {
+          transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+        }
       `}} />
 
       {/* Left Sidebar */}
@@ -436,7 +454,8 @@ export default function Conversation() {
                   return (
                     <div 
                       key={node.id} 
-                      className={`p-3 bg-brand-card/50 border border-brand-border/40 rounded-xl transition-all duration-200 ${glowClass}`}
+                      onClick={() => handleNodeSelect(node)}
+                      className={`p-3 bg-brand-card/50 border border-brand-border/40 rounded-xl transition-all duration-200 cursor-pointer hover:scale-[1.02] hover:bg-brand-card/80 active:scale-[0.98] ${glowClass}`}
                     >
                       <div className="flex items-center justify-between gap-2 mb-1.5">
                         <span className="font-semibold text-white text-xs truncate">{node.label}</span>
@@ -468,6 +487,100 @@ export default function Conversation() {
           </section>
         </div>
       </main>
+
+      {/* Detail Slide-out Drawer */}
+      {selectedNode && (
+        <div className={`fixed inset-0 z-50 flex justify-end transition-opacity duration-300 ${isDrawerOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+          {/* Backdrop Overlay */}
+          <div 
+            onClick={() => setIsDrawerOpen(false)}
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm cursor-pointer"
+          />
+          
+          {/* Drawer Container */}
+          <div 
+            className={`relative z-10 w-full sm:w-[380px] h-full bg-[#0B0F19]/95 backdrop-blur-2xl border-l border-brand-border/40 p-6 flex flex-col gap-5 shadow-[0_0_50px_rgba(0,0,0,0.8)] drawer-transition transform ${
+              isDrawerOpen ? 'translate-x-0' : 'translate-x-full'
+            }`}
+          >
+            {/* Close Button */}
+            <button 
+              onClick={() => setIsDrawerOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer"
+            >
+              <i className="fa-solid fa-xmark text-sm"></i>
+            </button>
+
+            {/* Drawer Header */}
+            <div className="pr-8">
+              <span className="text-[10px] font-bold text-brand-purple-light uppercase tracking-widest">Concept Details</span>
+              <h2 className="text-lg font-bold text-white mt-1">{selectedNode.label}</h2>
+            </div>
+
+            <div className="flex flex-col gap-4 overflow-y-auto pr-1 pb-6">
+              {/* Status Badge */}
+              <div>
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Understanding Level</div>
+                {(() => {
+                  const conf = selectedNode.confidence;
+                  let badgeText = 'Mastered';
+                  let badgeColor = 'text-brand-emerald border-brand-emerald/20 bg-brand-emerald/10';
+                  if (conf < 0.4) {
+                    badgeText = conf === 0 ? 'Unexplored' : 'Weak';
+                    badgeColor = 'text-red-400 border-red-500/20 bg-red-500/10 animate-pulse';
+                  } else if (conf < 0.7) {
+                    badgeText = 'Partial';
+                    badgeColor = 'text-brand-purple-light border-brand-purple/20 bg-brand-purple/10';
+                  }
+                  return (
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-bold ${badgeColor}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${conf < 0.4 ? 'bg-red-500' : conf < 0.7 ? 'bg-brand-purple' : 'bg-brand-emerald'}`}></span>
+                      {badgeText} ({Math.round(conf * 100)}%)
+                    </span>
+                  );
+                })()}
+              </div>
+
+              {/* Unlock Score */}
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Unlock Score</span>
+                  <span className="text-xs font-bold text-brand-purple-light">{selectedNode.unlock_score || 0} / 10</span>
+                </div>
+                <div className="w-full h-2 bg-black/40 rounded-full overflow-hidden border border-brand-border/20">
+                  <div 
+                    className="h-full rounded-full bg-gradient-to-r from-brand-purple to-brand-purple-light transition-all duration-500" 
+                    style={{ width: `${((selectedNode.unlock_score || 0) / 10) * 100}%` }}
+                  ></div>
+                </div>
+                <span className="text-[10px] text-gray-500 mt-1 block">Higher scores indicate concepts that unlock more downstream ideas.</span>
+              </div>
+
+              {/* Description */}
+              {selectedNode.description && (
+                <div className="bg-brand-card/40 border border-brand-border/30 rounded-xl p-3.5">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">AI Description</div>
+                  <p className="text-xs text-gray-300 leading-relaxed">{selectedNode.description}</p>
+                </div>
+              )}
+
+              {/* Diagnostic Evidence */}
+              <div className="bg-[#0b0f19] border border-brand-border/40 rounded-xl p-3.5">
+                <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Diagnostic Evidence</div>
+                <p className="text-xs text-gray-300 leading-relaxed italic">"{selectedNode.evidence}"</p>
+              </div>
+
+              {/* Depth */}
+              {selectedNode.depth && (
+                <div className="flex items-center gap-2 text-[11px] text-gray-400">
+                  <i className="fa-solid fa-layer-group text-brand-purple-light text-xs"></i>
+                  <span>Depth Level: <span className="text-white font-semibold">{selectedNode.depth === 1 ? 'Basic' : selectedNode.depth === 2 ? 'Intermediate' : 'Advanced'}</span></span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
