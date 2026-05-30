@@ -536,10 +536,10 @@ export default function Results() {
         </section>
 
         {/* Live Network Diagram & Dynamic Gaps List split */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="flex flex-col gap-8">
           
           {/* Concept Map visualizer */}
-          <div className="lg:col-span-2 glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[380px] animate-card-in" style={{ animationDelay: '500ms' }}>
+          <div className="glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[380px] animate-card-in" style={{ animationDelay: '500ms' }}>
             <div>
               <h2 className="text-lg font-bold text-white mb-1">Concept Dependency Map</h2>
               <p className="text-[11px] text-gray-500">
